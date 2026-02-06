@@ -670,12 +670,7 @@ export default function Page() {
           </main>
         )}
 
-        <footer className="footer">
-          <div className="muted small">
-            Endpoint: <code>/api/agenda</code> • Vercel → Cloudflare Worker
-          </div>
-        </footer>
-      </div>
-    </div>
-  );
-}
+<footer className="footer">
+  <div className="muted small">Desenvolvido por Paulo Sales.</div>
+</footer>
+
