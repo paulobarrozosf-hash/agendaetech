@@ -34,18 +34,14 @@ body{
   flex-direction: column;
 }
 
-/* ✅ Agora usa praticamente a tela inteira */
 .container{
   width: calc(100% - 28px);
   margin: 0 auto;
-  max-width: 1920px; /* sobe bem o teto, sem “amarrar” */
+  max-width: 1920px;
 }
 
-/* Em telas ultra-wide, aproveita mais ainda */
 @media (min-width: 2200px){
-  .container{
-    max-width: 2400px;
-  }
+  .container{ max-width: 2400px; }
 }
 
 .muted{ color: var(--muted); }
@@ -237,7 +233,7 @@ input:focus, select:focus{
 .stats{
   margin-top: 12px;
   display:grid;
-  grid-template-columns: repeat(4, minmax(220px, 1fr)); /* ✅ mais largo */
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
   gap: 12px;
 }
 .stat{
@@ -260,23 +256,14 @@ input:focus, select:focus{
   flex: 1;
 }
 
-/*
-  ✅ Grid padrão (por viatura): auto-fit para aproveitar a tela e dar cards maiores.
-*/
 .grid{
   display:grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
   gap: 12px;
 }
-
-/*
-  ✅ Grid "Por dia": também auto-fit (ao invés de tentar 7 colunas fininhas).
-  Isso deixa cada coluna (dia) mais larga e o card mostra Serviço direito.
-*/
 .gridDays{
-  grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
 }
-
 @media (max-width: 980px){
   .grid, .gridDays{ grid-template-columns: 1fr; }
 }
@@ -310,8 +297,25 @@ input:focus, select:focus{
   gap: 10px;
 }
 
-/* New Card (melhor) */
-.card2{
+/* Pills */
+.pill{
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(77,163,255,.24);
+  background: rgba(77,163,255,.12);
+  color: rgba(234,242,255,.9);
+  font-weight: 850;
+  white-space: nowrap;
+}
+.pill.ghost{
+  border-color: rgba(148,163,184,.22);
+  background: rgba(148,163,184,.08);
+  color: rgba(234,242,255,.75);
+}
+
+/* ✅ Card novo: alinhado + nada foge */
+.card3{
   padding: 12px;
   border-radius: 18px;
   border: 1px solid rgba(148,163,184,.18);
@@ -321,86 +325,82 @@ input:focus, select:focus{
   box-shadow: var(--shadow);
   transition: transform .12s ease, border-color .18s ease;
   border-left: 6px solid rgba(148,163,184,.85);
+  overflow: hidden; /* ✅ impede qualquer vazamento */
 }
-.card2:hover{
+
+.card3:hover{
   transform: translateY(-1px);
   border-color: rgba(124,196,255,.22);
 }
 
-.card2Top{
+.card3Top{
   display:flex;
   align-items:center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
-.card2Time{
+.card3Time{
   font-size: 22px;
   font-weight: 950;
   letter-spacing: .3px;
 }
 
-.card2Badges{
+.card3Badges{
   display:flex;
   gap: 8px;
   flex-wrap: wrap;
   justify-content:flex-end;
+  min-width: 0;
 }
 
-.pill{
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(77,163,255,.24);
-  background: rgba(77,163,255,.12);
-  color: rgba(234,242,255,.9);
-  font-weight: 850;
-}
-.pill.ghost{
-  border-color: rgba(148,163,184,.22);
-  background: rgba(148,163,184,.08);
-  color: rgba(234,242,255,.75);
-}
-
-.card2Title{
+.card3Title{
   margin-top: 10px;
+  display:flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.titleMain{
   font-weight: 950;
   line-height: 1.25;
 }
+.titleSub{
+  color: rgba(234,242,255,.72);
+  font-size: 12px;
+}
 
-/*
-  ✅ O bloco Serviço estava “sumindo” porque ficava estreito.
-  Aqui eu dou mais espaço pra ele (1.05fr / 1.35fr).
-*/
-.card2Body{
+/* ✅ grid interno com minmax(0,1fr) para evitar overflow lateral */
+.card3Body{
   margin-top: 12px;
   display:grid;
-  grid-template-columns: 1.05fr 1.35fr; /* Cliente | Serviço */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
 }
-@media (max-width: 720px){
-  .card2Body{ grid-template-columns: 1fr; }
+@media (max-width: 760px){
+  .card3Body{ grid-template-columns: 1fr; }
 }
 
-.card2Block{
+.card3Block{
   border-radius: 14px;
   border: 1px solid rgba(148,163,184,.16);
   background: rgba(6,10,18,.30);
   padding: 12px;
   min-width: 0;
+  overflow: hidden; /* ✅ nada sai do bloco */
 }
 
-.card2BlockTitle{
+.card3BlockTitle{
   font-weight: 950;
   font-size: 12px;
   color: rgba(124,196,255,.92);
   margin-bottom: 10px;
 }
 
-/* key-value rows compactas */
+/* ✅ K/V alinhado sempre */
 .kv{
   display:grid;
-  grid-template-columns: 92px 1fr;
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 10px;
   padding: 7px 0;
   border-bottom: 1px dashed rgba(148,163,184,.14);
@@ -411,12 +411,35 @@ input:focus, select:focus{
   font-size: 12px;
   color: rgba(148,163,184,.85);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+/* ✅ Valores com clamp: não estouram o card */
 .v{
   font-size: 12px;
   color: rgba(234,242,255,.92);
   text-align: right;
-  word-break: break-word;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* line clamp helpers */
+.vClamp1{
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+.vClamp2{
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.vClamp3{
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 /* Tone borders */
