@@ -2,19 +2,57 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+type ClienteEndereco = {
+  logradouro?: string | null;
+  numero?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+  cep?: string | null;
+  ll?: string | null; // lat/lng ou string do sistema
+};
+
+type ClienteObj = {
+  nome?: string | null;
+  endereco?: ClienteEndereco | null;
+  telefones?: string[] | null;
+  telefone?: string | null; // às vezes vem singular
+  plano?: string | null;
+  observacao?: string | null;
+};
+
 type Item = {
   tipo: string;
   id: string;
+
   contrato?: string | null;
   contrato_status?: string | null;
+
   status_id?: number | null;
   status?: string | null;
+
   data?: string | null;
   hora?: string | null;
+
   motivo?: string | null;
   responsavel?: string | null;
   usuario?: string | null;
-  cliente?: any;
+
+  // Pode vir assim (objeto):
+  cliente?: ClienteObj | null;
+
+  // Ou pode vir “achatado”:
+  cliente_nome?: string | null;
+  cliente_endereco?: string | null;
+  cliente_bairro?: string | null;
+  cliente_cidade?: string | null;
+  cliente_uf?: string | null;
+  cliente_cep?: string | null;
+  cliente_telefone?: string | null;
+  cliente_plano?: string | null;
+  cliente_observacao?: string | null;
+  cliente_ll?: string | null;
+
   titulo?: string | null;
   inicioISO?: string | null;
   fimISO?: string | null;
@@ -140,6 +178,92 @@ function saveReservas(reservas: Reserva[]) {
   localStorage.setItem(RESERVAS_KEY, JSON.stringify(reservas));
 }
 
+function onlyDigits(s: string) {
+  return (s || "").replace(/\D/g, "");
+}
+
+function toWhatsAppLink(phone: string, text?: string) {
+  const tel = onlyDigits(phone);
+  if (!tel) return null;
+  const base = `https://wa.me/${tel}`;
+  if (!text) return base;
+  return `${base}?text=${encodeURIComponent(text)}`;
+}
+
+// Normaliza cliente vindo como objeto ou achatado
+function extractCliente(it: Item) {
+  const nome =
+    it.cliente?.nome ??
+    it.cliente_nome ??
+    null;
+
+  const telefone =
+    (it.cliente?.telefones && it.cliente?.telefones[0]) ||
+    it.cliente?.telefone ||
+    it.cliente_telefone ||
+    null;
+
+  const plano =
+    it.cliente?.plano ??
+    it.cliente_plano ??
+    null;
+
+  const observacao =
+    it.cliente?.observacao ??
+    it.cliente_observacao ??
+    null;
+
+  // Endereço pode vir como texto (cliente_endereco) ou objeto (cliente.endereco)
+  const endObj = it.cliente?.endereco ?? null;
+
+  const logradouroNumero =
+    it.cliente_endereco ??
+    (endObj
+      ? [endObj.logradouro, endObj.numero].filter(Boolean).join(", ")
+      : null);
+
+  const bairro =
+    it.cliente_bairro ??
+    endObj?.bairro ??
+    null;
+
+  const cidade =
+    it.cliente_cidade ??
+    endObj?.cidade ??
+    null;
+
+  const uf =
+    it.cliente_uf ??
+    endObj?.uf ??
+    null;
+
+  const cep =
+    it.cliente_cep ??
+    endObj?.cep ??
+    null;
+
+  const ll =
+    it.cliente_ll ??
+    endObj?.ll ??
+    null;
+
+  const cidadeUf = [cidade, uf].filter(Boolean).join("/");
+
+  const enderecoLinha1 = logradouroNumero;
+  const enderecoLinha2 = [bairro, cidadeUf].filter(Boolean).join(" — ");
+
+  return {
+    nome,
+    telefone,
+    plano,
+    observacao,
+    enderecoLinha1,
+    enderecoLinha2,
+    cep,
+    ll,
+  };
+}
+
 export default function Page() {
   const initial = useMemo(() => parseFromURL(), []);
 
@@ -170,13 +294,11 @@ export default function Page() {
 
   const fim = useMemo(() => addDays(inicio, Math.max(0, dias - 1)), [inicio, dias]);
 
-  // Atualiza URL quando filtros mudarem (compartilhável)
   useEffect(() => {
     if (typeof window === "undefined") return;
     pushToURL({ inicio, dias, viatura, status, q, cliente, group, tab });
   }, [inicio, dias, viatura, status, q, cliente, group, tab]);
 
-  // Carrega reservas do localStorage
   useEffect(() => {
     setReservas(loadReservas());
   }, []);
@@ -198,12 +320,12 @@ export default function Page() {
     const qq = q.trim().toLowerCase();
     return flatItems
       .filter((it) => (viatura ? it._viatura === viatura : true))
-      .filter((it) => {
-        if (!status) return true;
-        return (it.status || "").toLowerCase().includes(status.toLowerCase());
-      })
+      .filter((it) => (status ? (it.status || "").toLowerCase().includes(status.toLowerCase()) : true))
       .filter((it) => {
         if (!qq) return true;
+
+        const c = extractCliente(it);
+
         const blob = [
           it._dia,
           it._viatura,
@@ -216,10 +338,18 @@ export default function Page() {
           it.usuario,
           it.titulo,
           it.tipo,
+          c.nome,
+          c.telefone,
+          c.plano,
+          c.enderecoLinha1,
+          c.enderecoLinha2,
+          c.cep,
+          c.observacao,
         ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
+
         return blob.includes(qq);
       })
       .sort((a, b) => `${a._dia} ${a.hora || ""}`.localeCompare(`${b._dia} ${b.hora || ""}`));
@@ -240,19 +370,12 @@ export default function Page() {
     setErr(null);
 
     try {
-      const qs = new URLSearchParams({
-        inicio,
-        fim,
-        cliente: cliente || "0",
-      });
-
+      const qs = new URLSearchParams({ inicio, fim, cliente: cliente || "0" });
       const resp = await fetch(`/api/agenda?${qs.toString()}`, { cache: "no-store" });
       const text = await resp.text();
-
       if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
 
-      const parsed = JSON.parse(text);
-      setData(parsed);
+      setData(JSON.parse(text));
       setLastUpdated(new Date().toLocaleString("pt-BR"));
     } catch (e: any) {
       setData(null);
@@ -272,7 +395,6 @@ export default function Page() {
   }
 
   function criarReserva() {
-    // validações básicas
     if (!rData) return alert("Informe a data.");
     if (!rHora) return alert("Informe a hora.");
     if (!rViatura) return alert("Selecione a viatura.");
@@ -291,13 +413,10 @@ export default function Page() {
       criadoEm: new Date().toISOString(),
     };
 
-    const next = [nova, ...reservas].sort((a, b) =>
-      `${a.data} ${a.hora}`.localeCompare(`${b.data} ${b.hora}`)
-    );
+    const next = [nova, ...reservas].sort((a, b) => `${a.data} ${a.hora}`.localeCompare(`${b.data} ${b.hora}`));
     setReservas(next);
     saveReservas(next);
 
-    // limpa alguns campos
     setRCliente("");
     setRServico("");
     setRMotivo("");
@@ -335,24 +454,21 @@ export default function Page() {
 
       <header className="topbar">
         <div className="container topbarInner">
-          {/* Left */}
           <div className="brand">
             <img src="/logo.png" alt="Etech" />
             <div>
-              <div className="brandTitle">E-Tech Informática Telecom • Agenda</div>
+              <div className="brandTitle">Etech • Agenda</div>
               <div className="brandSub">
                 <span className="muted">Atualizado: {lastUpdated || "—"}</span>
               </div>
             </div>
           </div>
 
-          {/* Center */}
           <div className="periodCenter">
             <div className="periodLabel">Período</div>
             <div className="chip">{periodoText}</div>
           </div>
 
-          {/* Right */}
           <div className="actionsRight">
             <button className="btn ghost" onClick={copyLink} type="button">
               Copiar link
@@ -365,13 +481,8 @@ export default function Page() {
       </header>
 
       <div className="container">
-        {/* Tabs */}
         <div className="tabs">
-          <button
-            className={cx("tab", tab === "agenda" && "tabActive")}
-            onClick={() => setTab("agenda")}
-            type="button"
-          >
+          <button className={cx("tab", tab === "agenda" && "tabActive")} onClick={() => setTab("agenda")} type="button">
             Agenda
           </button>
           <button
@@ -432,7 +543,7 @@ export default function Page() {
 
               <div className="field grow">
                 <label>Busca</label>
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="OS, contrato, motivo, usuário…" />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="OS, contrato, cliente, endereço, plano…" />
               </div>
 
               <div className="field">
@@ -448,9 +559,6 @@ export default function Page() {
               <section className="panel error">
                 <div className="errorTitle">Erro ao carregar</div>
                 <div className="errorMsg">{err}</div>
-                <div className="muted small">
-                  Dica: teste direto a API em <code>/api/agenda?inicio=YYYY-MM-DD&fim=YYYY-MM-DD&cliente=0</code>
-                </div>
               </section>
             )}
 
@@ -493,46 +601,123 @@ export default function Page() {
                       <div className="cards">
                         {list.map((it) => {
                           const tone = statusTone(it.status);
+                          const c = extractCliente(it);
+
+                          const waLink = c.telefone
+                            ? toWhatsAppLink(c.telefone, `Olá! Sobre a OS ${it.id} (contrato ${it.contrato || "—"}).`)
+                            : null;
 
                           return (
-                            <article
-                              key={`${it.tipo}-${it.id}-${it._viatura}-${it._dia}`}
-                              className={cx("card", `tone-${tone}`)}
-                            >
+                            <article key={`${it.tipo}-${it.id}-${it._viatura}-${it._dia}`} className={cx("card", `tone-${tone}`)}>
                               <div className="cardTop">
                                 <div className="time">{fmtHour(it.hora)}</div>
 
                                 <div className="badges">
                                   <span className="badge">{it._viatura}</span>
-                                  <span className="badge ghost">{it.tipo?.toUpperCase?.() || "ITEM"}</span>
+                                  <span className="badge ghost">{(it.tipo || "item").toUpperCase()}</span>
                                 </div>
                               </div>
 
                               <div className="cardTitle">
-                                OS {it.id} <span className="muted">•</span>{" "}
-                                <span className="muted">{it.status || "—"}</span>
+                                OS {it.id} <span className="muted">•</span> <span className="muted">{it.status || "—"}</span>
                               </div>
 
-                              {/* METAS com espaçamento correto */}
-                              <div className="cardMeta">
-                                <div className="metaRow">
-                                  <span className="k">Contrato</span>
-                                  <span className="v">{it.contrato || "—"}</span>
+                              <div className="cardGrid">
+                                {/* COLUNA: Cliente */}
+                                <div className="cardBlock">
+                                  <div className="blockTitle">Cliente</div>
+
+                                  <div className="metaRow">
+                                    <span className="k">Nome</span>
+                                    <span className="vWrap">{c.nome || "—"}</span>
+                                  </div>
+
+                                  <div className="metaRow">
+                                    <span className="k">Contato</span>
+                                    <span className="v">
+                                      {c.telefone || "—"}
+                                    </span>
+                                  </div>
+
+                                  <div className="metaRow">
+                                    <span className="k">Plano</span>
+                                    <span className="vWrap">{c.plano || "—"}</span>
+                                  </div>
+
+                                  <div className="metaRow">
+                                    <span className="k">Endereço</span>
+                                    <span className="vWrap">
+                                      {c.enderecoLinha1 || "—"}
+                                      {c.enderecoLinha2 ? <><br />{c.enderecoLinha2}</> : null}
+                                      {c.cep ? <><br /><span className="muted">CEP:</span> {c.cep}</> : null}
+                                    </span>
+                                  </div>
+
+                                  <div className="metaRow">
+                                    <span className="k">Obs</span>
+                                    <span className="vWrap">{c.observacao || "—"}</span>
+                                  </div>
+
+                                  <div className="miniActions">
+                                    {waLink && (
+                                      <a className="miniBtn" href={waLink} target="_blank" rel="noreferrer">
+                                        WhatsApp
+                                      </a>
+                                    )}
+                                    {c.telefone && (
+                                      <button
+                                        className="miniBtn ghost"
+                                        type="button"
+                                        onClick={async () => {
+                                          try {
+                                            await navigator.clipboard.writeText(c.telefone || "");
+                                          } catch {}
+                                        }}
+                                      >
+                                        Copiar telefone
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
 
-                                <div className="metaRow">
-                                  <span className="k">Tipo de serviço</span>
-                                  <span className="vWrap">{(it.tipo || "—").toString()}</span>
-                                </div>
+                                {/* COLUNA: Serviço */}
+                                <div className="cardBlock">
+                                  <div className="blockTitle">Serviço</div>
 
-                                <div className="metaRow">
-                                  <span className="k">Motivo</span>
-                                  <span className="vWrap">{it.motivo || "—"}</span>
-                                </div>
+                                  <div className="metaRow">
+                                    <span className="k">Contrato</span>
+                                    <span className="v">{it.contrato || "—"}</span>
+                                  </div>
 
-                                <div className="metaRow">
-                                  <span className="k">Usuário</span>
-                                  <span className="v">{it.usuario || "—"}</span>
+                                  <div className="metaRow">
+                                    <span className="k">Status contrato</span>
+                                    <span className="vWrap">{it.contrato_status || "—"}</span>
+                                  </div>
+
+                                  <div className="metaRow">
+                                    <span className="k">Data</span>
+                                    <span className="v">{it._dia || "—"}</span>
+                                  </div>
+
+                                  <div className="metaRow">
+                                    <span className="k">Hora</span>
+                                    <span className="v">{fmtHour(it.hora)}</span>
+                                  </div>
+
+                                  <div className="metaRow">
+                                    <span className="k">Motivo</span>
+                                    <span className="vWrap">{it.motivo || "—"}</span>
+                                  </div>
+
+                                  <div className="metaRow">
+                                    <span className="k">Responsável</span>
+                                    <span className="vWrap">{it.responsavel || it._viatura || "—"}</span>
+                                  </div>
+
+                                  <div className="metaRow">
+                                    <span className="k">Usuário</span>
+                                    <span className="v">{it.usuario || "—"}</span>
+                                  </div>
                                 </div>
                               </div>
                             </article>
@@ -553,9 +738,7 @@ export default function Page() {
               <div className="reservaHeader">
                 <div>
                   <div className="reservaTitle">Criar reserva</div>
-                  <div className="muted small">
-                    Neste MVP, as reservas são salvas no navegador (localStorage).
-                  </div>
+                  <div className="muted small">Neste MVP, as reservas são salvas no navegador (localStorage).</div>
                 </div>
               </div>
 
@@ -670,7 +853,10 @@ export default function Page() {
           </main>
         )}
 
-<footer className="footer">
-  <div className="muted small">Desenvolvido por Paulo Sales.</div>
-</footer>
-
+        <footer className="footer">
+          <div className="muted small">Desenvolvido por Paulo Sales.</div>
+        </footer>
+      </div>
+    </div>
+  );
+}
