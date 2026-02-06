@@ -7,7 +7,8 @@ export async function GET(req: Request) {
 
   const inicio = url.searchParams.get("inicio") || "";
   const fim = url.searchParams.get("fim") || "";
-  const cliente = url.searchParams.get("cliente") ?? "1"; // default: enriquecido
+
+  const cliente = url.searchParams.get("cliente") ?? "1";
   const max_clientes = url.searchParams.get("max_clientes") ?? "20";
 
   if (!inicio || !fim) {
@@ -17,7 +18,7 @@ export async function GET(req: Request) {
     );
   }
 
-  const workerBase = process.env.WORKER_AGENDA_URL; // ex: https://seu-worker.seudominio.workers.dev
+  const workerBase = process.env.WORKER_AGENDA_URL;
   if (!workerBase) {
     return NextResponse.json(
       { error: "WORKER_AGENDA_URL não configurada no ambiente" },
@@ -37,7 +38,8 @@ export async function GET(req: Request) {
   return new NextResponse(text, {
     status: resp.status,
     headers: {
-      "content-type": resp.headers.get("content-type") || "application/json; charset=utf-8",
+      "content-type":
+        resp.headers.get("content-type") || "application/json; charset=utf-8",
       "x-proxy-by": "vercel-next-route",
     },
   });
