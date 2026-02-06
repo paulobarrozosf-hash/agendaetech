@@ -60,23 +60,3 @@ export async function GET(req: Request) {
     },
   });
 }
-
-
-  const workerUrl = new URL("/agenda", workerBase);
-  workerUrl.searchParams.set("inicio", inicio);
-  workerUrl.searchParams.set("fim", fim);
-  workerUrl.searchParams.set("cliente", cliente);
-  workerUrl.searchParams.set("max_clientes", max_clientes);
-
-  const resp = await fetch(workerUrl.toString(), { cache: "no-store" });
-  const text = await resp.text();
-
-  return new NextResponse(text, {
-    status: resp.status,
-    headers: {
-      "content-type":
-        resp.headers.get("content-type") || "application/json; charset=utf-8",
-      "x-proxy-by": "vercel-next-route",
-    },
-  });
-}
