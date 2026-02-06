@@ -1,8 +1,5 @@
 :root{
   --bg: #050A12;
-  --panel: rgba(255,255,255,.06);
-  --panel2: rgba(6,10,18,.40);
-
   --border: rgba(148,163,184,.18);
   --text: #EAF2FF;
   --muted: rgba(234,242,255,.72);
@@ -138,7 +135,7 @@ body{
   .periodCenter, .actionsRight{ justify-self: start; text-align: left; justify-content: flex-start; }
 }
 
-/* Badges + chip */
+/* chip */
 .chip{
   display:inline-flex;
   align-items:center;
@@ -151,19 +148,9 @@ body{
   font-size: 12px;
 }
 
-.badge{
+.warn{
   font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(77,163,255,.24);
-  background: rgba(77,163,255,.12);
-  color: rgba(234,242,255,.9);
-  font-weight: 850;
-}
-.badge.ghost{
-  border-color: rgba(148,163,184,.22);
-  background: rgba(148,163,184,.08);
-  color: rgba(234,242,255,.75);
+  color: rgba(242,200,17,.95);
 }
 
 /* Buttons */
@@ -237,11 +224,6 @@ input:focus, select:focus{
   background: rgba(6,10,18,.72);
 }
 
-.warn{
-  font-size: 12px;
-  color: rgba(242,200,17,.95);
-}
-
 /* Stats */
 .stats{
   margin-top: 12px;
@@ -310,99 +292,106 @@ input:focus, select:focus{
   gap: 10px;
 }
 
-/* Cards */
-.card{
+/* New Card (melhor) */
+.card2{
   padding: 12px;
   border-radius: 18px;
   border: 1px solid rgba(148,163,184,.18);
-  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  background: radial-gradient(900px 300px at 10% 0%, rgba(124,196,255,.08), transparent 60%),
+              linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
   box-shadow: var(--shadow);
   transition: transform .12s ease, border-color .18s ease;
   border-left: 6px solid rgba(148,163,184,.85);
 }
-.card:hover{
+.card2:hover{
   transform: translateY(-1px);
   border-color: rgba(124,196,255,.22);
 }
 
-.cardHeader{
+.card2Top{
   display:flex;
   align-items:center;
   justify-content: space-between;
   gap: 12px;
 }
-.cardTime{
-  font-size: 20px;
+
+.card2Time{
+  font-size: 22px;
   font-weight: 950;
   letter-spacing: .3px;
 }
-.cardBadges{
+
+.card2Badges{
   display:flex;
   gap: 8px;
   flex-wrap: wrap;
   justify-content:flex-end;
 }
 
-.cardMainTitle{
-  margin-top: 10px;
-  font-weight: 950;
+.pill{
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(77,163,255,.24);
+  background: rgba(77,163,255,.12);
+  color: rgba(234,242,255,.9);
+  font-weight: 850;
+}
+.pill.ghost{
+  border-color: rgba(148,163,184,.22);
+  background: rgba(148,163,184,.08);
+  color: rgba(234,242,255,.75);
 }
 
-.cardGrid2{
+.card2Title{
+  margin-top: 10px;
+  font-weight: 950;
+  line-height: 1.25;
+}
+
+.card2Body{
   margin-top: 12px;
   display:grid;
-  grid-template-columns: 1.2fr 1.3fr;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 @media (max-width: 640px){
-  .cardGrid2{ grid-template-columns: 1fr; }
+  .card2Body{ grid-template-columns: 1fr; }
 }
 
-.cardSection{
+.card2Block{
   border-radius: 14px;
   border: 1px solid rgba(148,163,184,.16);
   background: rgba(6,10,18,.30);
   padding: 12px;
 }
 
-.sectionTitle{
+.card2BlockTitle{
   font-weight: 950;
   font-size: 12px;
   color: rgba(124,196,255,.92);
   margin-bottom: 10px;
 }
 
-.row{
-  display:flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 8px 0;
+/* key-value rows compactas */
+.kv{
+  display:grid;
+  grid-template-columns: 92px 1fr;
+  gap: 10px;
+  padding: 7px 0;
   border-bottom: 1px dashed rgba(148,163,184,.14);
 }
-.row:last-child{ border-bottom: 0; }
+.kv:last-child{ border-bottom: 0; padding-bottom: 0; }
 
 .k{
-  min-width: 96px;
   font-size: 12px;
   color: rgba(148,163,184,.85);
-}
-
-.v{
-  flex: 1;
-  text-align: right;
-  font-size: 12px;
-  color: rgba(234,242,255,.92);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-
-.vWrap{
-  flex: 1;
-  text-align: right;
+.v{
   font-size: 12px;
   color: rgba(234,242,255,.92);
-  white-space: pre-line; /* respeita \n */
+  text-align: right;
   word-break: break-word;
 }
 
