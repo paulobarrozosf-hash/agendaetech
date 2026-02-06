@@ -381,17 +381,22 @@ export default function Page() {
                           OS {it.id} <span className="muted">•</span>{" "}
                           <span className="muted">{it.status || "—"}</span>
                         </div>
-
-                        <div className="cardMeta">
-                          <div className="row">
+                          <div className="metaRow">
                             <span className="k">Contrato</span>
                             <span className="v">{it.contrato || "—"}</span>
                           </div>
-                          <div className="row">
+                        
+                          <div className="metaRow">
+                            <span className="k">Tipo</span>
+                            <span className="v">{(it.tipo || "—").toString()}</span>
+                          </div>
+                        
+                          <div className="metaRow">
                             <span className="k">Motivo</span>
                             <span className="v">{it.motivo || "—"}</span>
                           </div>
-                          <div className="row">
+                        
+                          <div className="metaRow">
                             <span className="k">Usuário</span>
                             <span className="v">{it.usuario || "—"}</span>
                           </div>
