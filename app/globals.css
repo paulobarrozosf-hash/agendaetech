@@ -86,18 +86,43 @@ code{
 }
 
 .topbarInner{
-  display:flex;
+  display:grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items:center;
-  justify-content: space-between;
   gap: 14px;
   padding: 14px 0;
 }
 
-.brand{
+.brand{ justify-self: start; }
+.periodCenter{
+  justify-self: center;
+  text-align: center;
   display:flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.periodTitle{
+  font-weight: 950;
+  letter-spacing: .2px;
+}
+
+.actionsRight{
+  justify-self: end;
+  display:flex;
+  gap: 10px;
   align-items:center;
-  gap: 12px;
-  min-width: 240px;
+  flex-wrap: wrap;
+}
+
+/* Em telas pequenas volta a empilhar */
+@media (max-width: 900px){
+  .topbarInner{
+    grid-template-columns: 1fr;
+  }
+  .periodCenter, .actionsRight, .brand{
+    justify-self: start;
+    text-align: left;
+  }
 }
 .brand img{
   width: 44px;
@@ -340,22 +365,43 @@ code{
   margin-top: 10px;
   display:flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;            /* mais espaço vertical */
 }
+
 .metaRow{
   display:flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;           /* espaço entre label e valor */
+  align-items: baseline;
 }
-.k{ font-size: 12px; color: var(--muted); }
+
+.k{
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .v{
   font-size: 12px;
   color: rgba(234,242,255,.86);
   text-align: right;
-  max-width: 70%;
+  max-width: 72%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Se você preferir NÃO cortar e sim quebrar linha em campos longos (motivo/tipo):
+   troque a regra .v acima por esta (ou crie uma variação .vWrap só pra motivo) */
+.vWrap{
+  font-size: 12px;
+  color: rgba(234,242,255,.86);
+  text-align: right;
+  max-width: 72%;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: initial;
+  word-break: break-word;
 }
 
 /* Status tones */
