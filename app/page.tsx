@@ -303,7 +303,7 @@ export default function Page() {
           <div className="brand">
             <div className="brandLogo">E</div>
             <div>
-              <div className="brandTitle">Agenda Operacional</div>
+              <div className="brandTitle">Agenda Operacional (2)</div>
               <div className="brandSub">Etech • SGP</div>
             </div>
           </div>
