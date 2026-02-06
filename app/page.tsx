@@ -339,7 +339,7 @@ export default function Page() {
           <div className="brand">
             <img src="/logo.png" alt="Etech" />
             <div>
-              <div className="brandTitle">Etech • Agenda</div>
+              <div className="brandTitle">E-Tech Informática Telecom • Agenda</div>
               <div className="brandSub">
                 <span className="muted">Atualizado: {lastUpdated || "—"}</span>
               </div>
