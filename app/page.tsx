@@ -64,17 +64,14 @@ type FlatItem = Item & { _dia: string; _viatura: string };
 function hojeISO() {
   return new Date().toISOString().slice(0, 10);
 }
-
 function addDays(dateISO: string, days: number) {
   const d = new Date(dateISO + "T00:00:00");
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 }
-
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
-
 function statusTone(status?: string | null) {
   const s = (status || "").toLowerCase();
   if (s.includes("reserv")) return "gold";
@@ -84,12 +81,14 @@ function statusTone(status?: string | null) {
   if (s.includes("encerr")) return "muted";
   return "muted";
 }
-
 function fmtHour(h?: string | null) {
   if (!h) return "--:--";
   return h.slice(0, 5);
 }
-
+function safeText(x: any) {
+  const s = (x ?? "").toString().trim();
+  return s.length ? s : "—";
+}
 function parseFromURL() {
   if (typeof window === "undefined") return null;
   const sp = new URLSearchParams(window.location.search);
@@ -102,13 +101,12 @@ function parseFromURL() {
   const q = sp.get("q") || "";
 
   const cliente = sp.get("cliente") || "1";
-  const max_clientes = sp.get("max_clientes") || "200";
+  const max_clientes = sp.get("max_clientes") || "250";
 
   const group = (sp.get("group") as "dia" | "viatura") || "dia";
 
   return { inicio, dias, viatura, status, q, cliente, max_clientes, group };
 }
-
 function pushToURL(state: {
   inicio: string;
   dias: number;
@@ -131,22 +129,23 @@ function pushToURL(state: {
   window.history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
 }
 
-function formatEnderecoLinha(c?: ClienteObj | null) {
+function clienteEnderecoLinha(c?: ClienteObj | null) {
   const e = c?.endereco;
   const l1 = [e?.logradouro, e?.numero].filter(Boolean).join(", ");
-  const l2 = [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/")].filter(Boolean).join(" — ");
+  const cidadeUf = [e?.cidade, e?.uf].filter(Boolean).join("/");
+  const l2 = [e?.bairro, cidadeUf].filter(Boolean).join(" — ");
   const compl = e?.complemento ? String(e.complemento) : "";
   return [l1, l2, compl].filter(Boolean).join(" • ");
 }
 
-function firstPhones(c?: ClienteObj | null) {
+function phonesLinha(c?: ClienteObj | null) {
   const t = (c?.telefones || []).filter(Boolean);
-  return [t[0], t[1]].filter(Boolean).join(" / ");
+  return [t[0], t[1], t[2]].filter(Boolean).join(" / ");
 }
 
-function safeText(x: any) {
-  const s = (x ?? "").toString().trim();
-  return s.length ? s : "—";
+function stop(e: React.MouseEvent) {
+  e.preventDefault();
+  e.stopPropagation();
 }
 
 export default function Page() {
@@ -160,7 +159,7 @@ export default function Page() {
   const [q, setQ] = useState(initial?.q ?? "");
 
   const [clienteFlag, setClienteFlag] = useState(initial?.cliente ?? "1");
-  const [maxClientes, setMaxClientes] = useState(initial?.max_clientes ?? "200");
+  const [maxClientes, setMaxClientes] = useState(initial?.max_clientes ?? "250");
 
   const [group, setGroup] = useState<"dia" | "viatura">(initial?.group ?? "dia");
 
@@ -168,6 +167,8 @@ export default function Page() {
   const [err, setErr] = useState<string | null>(null);
   const [data, setData] = useState<AgendaResp | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("—");
+
+  const [selected, setSelected] = useState<FlatItem | null>(null);
 
   const fim = useMemo(() => addDays(inicio, Math.max(0, dias - 1)), [inicio, dias]);
 
@@ -217,6 +218,21 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fechar modal com ESC + travar scroll do body
+  useEffect(() => {
+    function onKeyDown(ev: KeyboardEvent) {
+      if (ev.key === "Escape") setSelected(null);
+    }
+    if (selected) {
+      document.addEventListener("keydown", onKeyDown);
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.removeEventListener("keydown", onKeyDown);
+        document.body.style.overflow = "";
+      };
+    }
+  }, [selected]);
+
   const flatItems: FlatItem[] = useMemo(() => {
     if (!data) return [];
     const out: FlatItem[] = [];
@@ -238,6 +254,7 @@ export default function Page() {
       .filter((it) => (status ? (it.status || "").toLowerCase().includes(status.toLowerCase()) : true))
       .filter((it) => {
         if (!qq) return true;
+
         const c = it.cliente;
         const blob = [
           it._dia,
@@ -253,13 +270,14 @@ export default function Page() {
           c?.email,
           c?.plano,
           c?.observacao,
-          formatEnderecoLinha(c),
+          clienteEnderecoLinha(c),
           c?.endereco?.cep,
           c?.endereco?.ll,
         ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
+
         return blob.includes(qq);
       })
       .sort((a, b) => `${a._dia} ${a.hora || ""}`.localeCompare(`${b._dia} ${b.hora || ""}`));
@@ -302,6 +320,7 @@ export default function Page() {
             <button className="btn primary" onClick={loadAgenda} disabled={loading}>
               {loading ? "Carregando..." : "Atualizar"}
             </button>
+            <div className="chip small">Atualizado: {lastUpdated}</div>
           </div>
         </div>
       </header>
@@ -401,10 +420,8 @@ export default function Page() {
               <div className="statValue">{data.meta?.contratos_consultados ?? 0}</div>
             </div>
             <div className="stat">
-              <div className="statLabel">Atualização</div>
-              <div className="statValue" style={{ fontSize: 14, lineHeight: "18px" }}>
-                {lastUpdated}
-              </div>
+              <div className="statLabel">Max clientes</div>
+              <div className="statValue">{data.parametros?.max_clientes ?? 0}</div>
             </div>
           </section>
         ) : null}
@@ -421,98 +438,66 @@ export default function Page() {
                 <div className="cards">
                   {list.map((it) => {
                     const c = it.cliente;
-                    const e = c?.endereco;
+                    const endLinha = clienteEnderecoLinha(c);
 
                     return (
                       <article
                         key={`${it.tipo}-${it.id}-${it._viatura}-${it._dia}`}
-                        className={cx("card3", `tone-${statusTone(it.status)}`)}
+                        className={cx("cardCompact", `tone-${statusTone(it.status)}`)}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelected(it)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") setSelected(it);
+                        }}
                       >
-                        <div className="card3Top">
-                          <div className="card3Time">{fmtHour(it.hora)}</div>
-
-                          <div className="card3Badges">
+                        <div className="cardCompactTop">
+                          <div className="cardCompactTime">{fmtHour(it.hora)}</div>
+                          <div className="cardCompactBadges">
                             <span className="pill">{it._viatura}</span>
                             <span className="pill ghost">OS {it.id}</span>
                             <span className="pill ghost">{safeText(it.status)}</span>
                           </div>
                         </div>
 
-                        <div className="card3Title">
-                          <span className="titleMain">{safeText(it.motivo)}</span>
-                          <span className="titleSub">
-                            Contrato <b>{safeText(it.contrato)}</b>
-                          </span>
+                        <div className="cardCompactTitle">
+                          <div className="titleMainClamp">{safeText(it.motivo)}</div>
+                          <div className="titleSub">
+                            Cliente: <b>{safeText(c?.nome)}</b>
+                          </div>
                         </div>
 
-                        <div className="card3Body">
-                          <div className="card3Block">
-                            <div className="card3BlockTitle">Cliente</div>
-
-                            <div className="kv">
-                              <span className="k">Nome</span>
-                              <span className="v vClamp2">{safeText(c?.nome)}</span>
-                            </div>
-
-                            <div className="kv">
-                              <span className="k">Contato</span>
-                              <span className="v">{safeText(firstPhones(c))}</span>
-                            </div>
-
-                            <div className="kv">
-                              <span className="k">Email</span>
-                              <span className="v vClamp1">{safeText(c?.email)}</span>
-                            </div>
-
-                            <div className="kv">
-                              <span className="k">Plano</span>
-                              <span className="v vClamp2">{safeText(c?.plano)}</span>
-                            </div>
-
-                            <div className="kv">
-                              <span className="k">Endereço</span>
-                              <span className="v vClamp3">{safeText(formatEnderecoLinha(c))}</span>
-                            </div>
-
-                            <div className="kv">
-                              <span className="k">CEP</span>
-                              <span className="v">{safeText(e?.cep)}</span>
-                            </div>
+                        <div className="cardCompactBody">
+                          <div className="kvRow">
+                            <span className="k">Contrato</span>
+                            <span className="v">{safeText(it.contrato)}</span>
                           </div>
 
-                          <div className="card3Block">
-                            <div className="card3BlockTitle">Serviço</div>
-
-                            <div className="kv">
-                              <span className="k">Status</span>
-                              <span className="v">{safeText(it.status)}</span>
-                            </div>
-
-                            <div className="kv">
-                              <span className="k">Usuário</span>
-                              <span className="v vClamp1">{safeText(it.usuario)}</span>
-                            </div>
-
-                            <div className="kv">
-                              <span className="k">Resp.</span>
-                              <span className="v vClamp1">{safeText(it.responsavel)}</span>
-                            </div>
-
-                            <div className="kv">
-                              <span className="k">C. status</span>
-                              <span className="v">{safeText(it.contrato_status)}</span>
-                            </div>
-
-                            <div className="kv">
-                              <span className="k">LL</span>
-                              <span className="v vClamp1">{safeText(e?.ll)}</span>
-                            </div>
-
-                            <div className="kv">
-                              <span className="k">Obs.</span>
-                              <span className="v vClamp2">{safeText(c?.observacao)}</span>
-                            </div>
+                          <div className="kvRow">
+                            <span className="k">Motivo</span>
+                            <span className="v vClamp2">{safeText(it.motivo)}</span>
                           </div>
+
+                          <div className="kvRow">
+                            <span className="k">Endereço</span>
+                            <span className="v vClamp2">{safeText(endLinha)}</span>
+                          </div>
+
+                          <div className="kvRow">
+                            <span className="k">Usuário</span>
+                            <span className="v">{safeText(it.usuario)}</span>
+                          </div>
+
+                          <div className="kvRow">
+                            <span className="k">Resp.</span>
+                            <span className="v">{safeText(it.responsavel)}</span>
+                          </div>
+                        </div>
+
+                        <div className="cardCompactFooter">
+                          <button className="btnMini" onClick={(e) => { stop(e); setSelected(it); }}>
+                            Ver mais
+                          </button>
                         </div>
                       </article>
                     );
@@ -521,19 +506,113 @@ export default function Page() {
               </section>
             ))}
           </div>
-
-          {!loading && !err && grouped.length === 0 ? (
-            <section className="panel empty">
-              <div className="emptyTitle">Sem registros</div>
-              <div className="muted small">Nenhum item para os filtros informados.</div>
-            </section>
-          ) : null}
         </main>
 
         <footer className="footer">
           <div className="muted small">Desenvolvido por Paulo Sales.</div>
         </footer>
       </div>
+
+      {/* MODAL */}
+      {selected ? (
+        <div className="overlay" onMouseDown={() => setSelected(null)}>
+          <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modalHead">
+              <div className="modalTitle">
+                <div className="modalTitleMain">
+                  OS {safeText(selected.id)} • {safeText(selected.status)}
+                </div>
+                <div className="modalTitleSub">
+                  {safeText(selected._dia)} • {safeText(selected._viatura)} • {safeText(selected.hora)}
+                </div>
+              </div>
+
+              <button className="iconBtn" onClick={() => setSelected(null)} aria-label="Fechar">
+                ✕
+              </button>
+            </div>
+
+            <div className="modalBody">
+              <div className="modalGrid">
+                <section className="modalBlock">
+                  <div className="modalBlockTitle">Ordem de Serviço</div>
+
+                  <div className="kvRow">
+                    <span className="k">Contrato</span>
+                    <span className="v">{safeText(selected.contrato)}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">Motivo</span>
+                    <span className="v vClamp3">{safeText(selected.motivo)}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">Usuário</span>
+                    <span className="v">{safeText(selected.usuario)}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">Responsável</span>
+                    <span className="v">{safeText(selected.responsavel)}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">Status</span>
+                    <span className="v">{safeText(selected.status)}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">Contrato status</span>
+                    <span className="v">{safeText(selected.contrato_status)}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">Início</span>
+                    <span className="v">{safeText(selected.inicioISO)}</span>
+                  </div>
+                </section>
+
+                <section className="modalBlock">
+                  <div className="modalBlockTitle">Cliente</div>
+
+                  <div className="kvRow">
+                    <span className="k">Nome</span>
+                    <span className="v vClamp2">{safeText(selected.cliente?.nome)}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">Contato</span>
+                    <span className="v vClamp2">{safeText(phonesLinha(selected.cliente))}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">Email</span>
+                    <span className="v vClamp2">{safeText(selected.cliente?.email)}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">Plano</span>
+                    <span className="v vClamp2">{safeText(selected.cliente?.plano)}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">Endereço</span>
+                    <span className="v vClamp3">{safeText(clienteEnderecoLinha(selected.cliente))}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">CEP</span>
+                    <span className="v">{safeText(selected.cliente?.endereco?.cep)}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">LL</span>
+                    <span className="v vClamp2">{safeText(selected.cliente?.endereco?.ll)}</span>
+                  </div>
+                  <div className="kvRow">
+                    <span className="k">Obs.</span>
+                    <span className="v vClamp3">{safeText(selected.cliente?.observacao)}</span>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <div className="modalFoot">
+              <div className="chip small">ESC para fechar</div>
+              <button className="btn" onClick={() => setSelected(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
