@@ -19,7 +19,7 @@ type ClienteObj = {
   email?: string | null;
   plano?: string | null;
   observacao?: string | null;
-  contratoId?: string | null;
+  contratoId?: string | number | null;
   endereco?: ClienteEndereco | null;
 };
 
@@ -36,7 +36,6 @@ type Item = {
   responsavel?: string | null;
   usuario?: string | null;
 
-  // vem do Worker enriquecido:
   cliente?: ClienteObj | null;
 
   titulo?: string | null;
@@ -52,7 +51,11 @@ type Dia = {
 type AgendaResp = {
   range: { inicio: string; fim: string };
   parametros: { cliente: number; max_clientes: number };
-  meta?: { contratos_unicos_total?: number; contratos_consultados?: number; aviso?: string | null };
+  meta?: {
+    contratos_unicos_total?: number;
+    contratos_consultados?: number;
+    aviso?: string | null;
+  };
   totais: { os: number; reservas: number };
   viaturas: string[];
   dias: Dia[];
@@ -64,14 +67,17 @@ type FlatItem = Item & { _dia: string; _viatura: string };
 function hojeISO() {
   return new Date().toISOString().slice(0, 10);
 }
+
 function addDays(dateISO: string, days: number) {
   const d = new Date(dateISO + "T00:00:00");
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 }
+
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
+
 function statusTone(status?: string | null) {
   const s = (status || "").toLowerCase();
   if (s.includes("reserv")) return "gold";
@@ -81,6 +87,7 @@ function statusTone(status?: string | null) {
   if (s.includes("encerr")) return "muted";
   return "muted";
 }
+
 function fmtHour(h?: string | null) {
   if (!h) return "--:--";
   return h.slice(0, 5);
@@ -89,14 +96,19 @@ function fmtHour(h?: string | null) {
 function parseFromURL() {
   if (typeof window === "undefined") return null;
   const sp = new URLSearchParams(window.location.search);
+
   const inicio = sp.get("inicio") || hojeISO();
   const dias = Number(sp.get("dias") || "7") || 7;
+
   const viatura = sp.get("viatura") || "";
   const status = sp.get("status") || "";
   const q = sp.get("q") || "";
-  const cliente = sp.get("cliente") || "1"; // default enriquecido
+
+  const cliente = sp.get("cliente") || "1";
   const max_clientes = sp.get("max_clientes") || "20";
+
   const group = (sp.get("group") as "dia" | "viatura") || "dia";
+
   return { inicio, dias, viatura, status, q, cliente, max_clientes, group };
 }
 
@@ -122,11 +134,19 @@ function pushToURL(state: {
   window.history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
 }
 
-function fmtEndereco(c?: ClienteObj | null) {
+function enderecoFormatado(c?: ClienteObj | null) {
   const e = c?.endereco;
   const linha1 = [e?.logradouro, e?.numero].filter(Boolean).join(", ");
-  const linha2 = [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/")].filter(Boolean).join(" — ");
-  return { linha1, linha2, cep: e?.cep || "", ll: e?.ll || "" };
+  const cidadeUf = [e?.cidade, e?.uf].filter(Boolean).join("/");
+  const linha2 = [e?.bairro, cidadeUf].filter(Boolean).join(" — ");
+  const compl = e?.complemento ? String(e.complemento) : "";
+  return {
+    linha1: linha1 || "",
+    linha2: linha2 || "",
+    complemento: compl || "",
+    cep: e?.cep || "",
+    ll: e?.ll || "",
+  };
 }
 
 export default function Page() {
@@ -134,24 +154,68 @@ export default function Page() {
 
   const [inicio, setInicio] = useState(initial?.inicio ?? hojeISO());
   const [dias, setDias] = useState<number>(initial?.dias ?? 7);
+
   const [viatura, setViatura] = useState(initial?.viatura ?? "");
   const [status, setStatus] = useState(initial?.status ?? "");
   const [q, setQ] = useState(initial?.q ?? "");
+
   const [clienteFlag, setClienteFlag] = useState(initial?.cliente ?? "1");
   const [maxClientes, setMaxClientes] = useState(initial?.max_clientes ?? "20");
+
   const [group, setGroup] = useState<"dia" | "viatura">(initial?.group ?? "dia");
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [data, setData] = useState<AgendaResp | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string>("—");
 
   const fim = useMemo(() => addDays(inicio, Math.max(0, dias - 1)), [inicio, dias]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    pushToURL({ inicio, dias, viatura, status, q, cliente: clienteFlag, max_clientes: maxClientes, group });
+    pushToURL({
+      inicio,
+      dias,
+      viatura,
+      status,
+      q,
+      cliente: clienteFlag,
+      max_clientes: maxClientes,
+      group,
+    });
   }, [inicio, dias, viatura, status, q, clienteFlag, maxClientes, group]);
+
+  async function loadAgenda() {
+    setLoading(true);
+    setErr(null);
+
+    try {
+      const qs = new URLSearchParams({
+        inicio,
+        fim,
+        cliente: clienteFlag,
+        max_clientes: maxClientes,
+      });
+
+      const resp = await fetch(`/api/agenda?${qs.toString()}`, { cache: "no-store" });
+      const text = await resp.text();
+      if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
+
+      const j = JSON.parse(text) as AgendaResp;
+      setData(j);
+      setLastUpdated(new Date().toLocaleString("pt-BR"));
+    } catch (e: any) {
+      setData(null);
+      setErr(e?.message || "Erro ao carregar agenda.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAgenda();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const flatItems: FlatItem[] = useMemo(() => {
     if (!data) return [];
@@ -168,13 +232,15 @@ export default function Page() {
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
+
     return flatItems
       .filter((it) => (viatura ? it._viatura === viatura : true))
       .filter((it) => (status ? (it.status || "").toLowerCase().includes(status.toLowerCase()) : true))
       .filter((it) => {
         if (!qq) return true;
+
         const c = it.cliente;
-        const e = fmtEndereco(c);
+        const e = enderecoFormatado(c);
         const blob = [
           it._dia,
           it._viatura,
@@ -185,15 +251,18 @@ export default function Page() {
           it.usuario,
           c?.nome,
           (c?.telefones || []).join(" "),
+          c?.email,
           c?.plano,
           e.linha1,
           e.linha2,
+          e.complemento,
           e.cep,
-          c?.observacao,
+          e.ll,
         ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
+
         return blob.includes(qq);
       })
       .sort((a, b) => `${a._dia} ${a.hora || ""}`.localeCompare(`${b._dia} ${b.hora || ""}`));
@@ -209,35 +278,6 @@ export default function Page() {
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [filtered, group]);
 
-  async function loadAgenda() {
-    setLoading(true);
-    setErr(null);
-    try {
-      const qs = new URLSearchParams({
-        inicio,
-        fim,
-        cliente: clienteFlag,
-        max_clientes: maxClientes,
-      });
-
-      const resp = await fetch(`/api/agenda?${qs.toString()}`, { cache: "no-store" });
-      const text = await resp.text();
-      if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
-      setData(JSON.parse(text));
-      setLastUpdated(new Date().toLocaleString("pt-BR"));
-    } catch (e: any) {
-      setData(null);
-      setErr(e?.message ?? "Falha ao carregar agenda.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadAgenda();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   return (
     <div className="app">
       <div className="bgGrid" />
@@ -246,10 +286,10 @@ export default function Page() {
       <header className="topbar">
         <div className="container topbarInner">
           <div className="brand">
-            <img src="/logo.png" alt="Etech" />
+            <div className="brandLogo">E</div>
             <div>
-              <div className="brandTitle">Agenda Operacional</div>
-              <div className="brandSub">Etech • SGP</div>
+              <div className="brandTitle">Agenda Etech</div>
+              <div className="brandSub">SGP • Viaturas</div>
             </div>
           </div>
 
@@ -258,12 +298,14 @@ export default function Page() {
             <div className="chip">
               {inicio} <span className="muted">→</span> {fim}
             </div>
+            {data?.meta?.aviso ? <div className="warn">{data.meta.aviso}</div> : null}
           </div>
 
           <div className="actionsRight">
             <button className="btn primary" onClick={loadAgenda} disabled={loading}>
               {loading ? "Carregando..." : "Atualizar"}
             </button>
+            <div className="chip small">Atualizado: {lastUpdated}</div>
           </div>
         </div>
       </header>
@@ -311,10 +353,10 @@ export default function Page() {
           </div>
 
           <div className="field">
-            <label>Cliente (enriquecer)</label>
+            <label>Cliente</label>
             <select value={clienteFlag} onChange={(e) => setClienteFlag(e.target.value)}>
-              <option value="1">Sim</option>
-              <option value="0">Não</option>
+              <option value="1">Enriquecer (Sim)</option>
+              <option value="0">Somente O.S (Não)</option>
             </select>
           </div>
 
@@ -333,21 +375,25 @@ export default function Page() {
 
           <div className="field grow">
             <label>Busca</label>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cliente, contrato, endereço, plano..." />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Cliente, contrato, endereço, plano..."
+            />
           </div>
         </section>
 
-        {err && (
+        {err ? (
           <section className="panel error">
             <div className="errorTitle">Erro</div>
             <div className="errorMsg">{err}</div>
           </section>
-        )}
+        ) : null}
 
-        {data && (
+        {data ? (
           <section className="stats">
             <div className="stat">
-              <div className="statLabel">OS</div>
+              <div className="statLabel">O.S</div>
               <div className="statValue">{data.totais?.os ?? 0}</div>
             </div>
             <div className="stat">
@@ -359,13 +405,11 @@ export default function Page() {
               <div className="statValue">{data.meta?.contratos_consultados ?? 0}</div>
             </div>
             <div className="stat">
-              <div className="statLabel">Atualização</div>
-              <div className="statValue" style={{ fontSize: 14, lineHeight: "20px" }}>
-                {lastUpdated || "—"}
-              </div>
+              <div className="statLabel">Max clientes</div>
+              <div className="statValue">{data.parametros?.max_clientes ?? 0}</div>
             </div>
           </section>
-        )}
+        ) : null}
 
         <main className="content">
           <div className={cx("grid", group === "dia" && "gridDays")}>
@@ -378,82 +422,106 @@ export default function Page() {
 
                 <div className="cards">
                   {list.map((it) => {
-                    const tone = statusTone(it.status);
                     const c = it.cliente;
-                    const e = fmtEndereco(c);
-                    const tel = c?.telefones?.[0] || "";
+                    const e = c?.endereco;
+                    const end = enderecoFormatado(c);
+
+                    const tel1 = (c?.telefones && c.telefones[0]) || "";
+                    const tel2 = (c?.telefones && c.telefones[1]) || "";
+
                     return (
-                      <article key={`${it.tipo}-${it.id}-${it._viatura}-${it._dia}`} className={cx("card", `tone-${tone}`)}>
-                        <div className="cardTop">
-                          <div className="time">{fmtHour(it.hora)}</div>
-                          <div className="badges">
+                      <article
+                        key={`${it.tipo}-${it.id}-${it._viatura}-${it._dia}`}
+                        className={cx("card", `tone-${statusTone(it.status)}`)}
+                      >
+                        <div className="cardHeader">
+                          <div className="cardTime">{fmtHour(it.hora)}</div>
+                          <div className="cardBadges">
                             <span className="badge">{it._viatura}</span>
-                            <span className="badge ghost">{it.tipo?.toUpperCase?.() || "ITEM"}</span>
+                            <span className="badge ghost">{it.status || "—"}</span>
+                            <span className="badge ghost">Contrato {it.contrato || "—"}</span>
                           </div>
                         </div>
 
-                        <div className="cardTitle">
-                          OS {it.id} <span className="muted">•</span> <span className="muted">{it.status || "—"}</span>
+                        <div className="cardMainTitle">
+                          {it.motivo || "—"} <span className="muted">•</span> OS {it.id}
                         </div>
 
-                        <div className="cardGrid">
-                          <div className="cardBlock">
-                            <div className="blockTitle">Cliente</div>
+                        <div className="cardGrid2">
+                          <div className="cardSection">
+                            <div className="sectionTitle">Cliente</div>
 
-                            <div className="metaRow">
+                            <div className="row">
                               <span className="k">Nome</span>
                               <span className="vWrap">{c?.nome || "—"}</span>
                             </div>
 
-                            <div className="metaRow">
+                            <div className="row">
                               <span className="k">Contato</span>
-                              <span className="v">{tel || "—"}</span>
+                              <span className="vWrap">
+                                {[tel1, tel2].filter(Boolean).join(" / ") || "—"}
+                              </span>
                             </div>
 
-                            <div className="metaRow">
+                            <div className="row">
+                              <span className="k">Email</span>
+                              <span className="vWrap">{c?.email || "—"}</span>
+                            </div>
+
+                            <div className="row">
                               <span className="k">Plano</span>
                               <span className="vWrap">{c?.plano || "—"}</span>
                             </div>
 
-                            <div className="metaRow">
-                              <span className="k">Obs.</span>
-                              <span className="vWrap">{c?.observacao || "—"}</span>
-                            </div>
-
-                            <div className="metaRow">
+                            <div className="row">
                               <span className="k">Endereço</span>
                               <span className="vWrap">
-                                {[e.linha1, e.linha2].filter(Boolean).join("\n") || "—"}
+                                {([end.linha1, end.linha2, end.complemento].filter(Boolean).join("\n") || "—") as any}
                               </span>
                             </div>
 
-                            <div className="metaRow">
+                            <div className="row">
                               <span className="k">CEP</span>
-                              <span className="v">{e.cep || "—"}</span>
+                              <span className="v">{e?.cep || "—"}</span>
+                            </div>
+
+                            <div className="row">
+                              <span className="k">LL</span>
+                              <span className="vWrap">{e?.ll || "—"}</span>
                             </div>
                           </div>
 
-                          <div className="cardBlock">
-                            <div className="blockTitle">Serviço</div>
+                          <div className="cardSection">
+                            <div className="sectionTitle">Serviço</div>
 
-                            <div className="metaRow">
-                              <span className="k">Contrato</span>
-                              <span className="v">{it.contrato || "—"}</span>
+                            <div className="row">
+                              <span className="k">Status</span>
+                              <span className="v">{it.status || "—"}</span>
                             </div>
 
-                            <div className="metaRow">
-                              <span className="k">Motivo</span>
-                              <span className="vWrap">{it.motivo || "—"}</span>
-                            </div>
-
-                            <div className="metaRow">
+                            <div className="row">
                               <span className="k">Usuário</span>
                               <span className="v">{it.usuario || "—"}</span>
                             </div>
 
-                            <div className="metaRow">
-                              <span className="k">Resp.</span>
+                            <div className="row">
+                              <span className="k">Equipe</span>
                               <span className="v">{it.responsavel || "—"}</span>
+                            </div>
+
+                            <div className="row">
+                              <span className="k">Contrato</span>
+                              <span className="v">{it.contrato || "—"}</span>
+                            </div>
+
+                            <div className="row">
+                              <span className="k">Contrato status</span>
+                              <span className="vWrap">{it.contrato_status || "—"}</span>
+                            </div>
+
+                            <div className="row">
+                              <span className="k">Obs. cliente</span>
+                              <span className="vWrap">{c?.observacao || "—"}</span>
                             </div>
                           </div>
                         </div>
@@ -465,15 +533,17 @@ export default function Page() {
             ))}
           </div>
 
-          {!loading && !err && grouped.length === 0 && (
+          {!loading && !err && grouped.length === 0 ? (
             <section className="panel empty">
               <div className="emptyTitle">Sem registros</div>
               <div className="muted small">Nenhum item para os filtros informados.</div>
             </section>
-          )}
+          ) : null}
         </main>
 
-        <footer className="footer">Desenvolvido por Paulo Sales.</footer>
+        <footer className="footer">
+          <div className="muted small">Desenvolvido por Paulo Sales.</div>
+        </footer>
       </div>
     </div>
   );
