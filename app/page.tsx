@@ -5,53 +5,39 @@ import { useEffect, useMemo, useState } from "react";
 type ClienteEndereco = {
   logradouro?: string | null;
   numero?: string | null;
+  complemento?: string | null;
   bairro?: string | null;
   cidade?: string | null;
   uf?: string | null;
   cep?: string | null;
-  ll?: string | null; // lat/lng ou string do sistema
+  ll?: string | null;
 };
 
 type ClienteObj = {
   nome?: string | null;
-  endereco?: ClienteEndereco | null;
   telefones?: string[] | null;
-  telefone?: string | null; // às vezes vem singular
+  email?: string | null;
   plano?: string | null;
   observacao?: string | null;
+  contratoId?: string | null;
+  endereco?: ClienteEndereco | null;
 };
 
 type Item = {
   tipo: string;
   id: string;
-
   contrato?: string | null;
   contrato_status?: string | null;
-
   status_id?: number | null;
   status?: string | null;
-
   data?: string | null;
   hora?: string | null;
-
   motivo?: string | null;
   responsavel?: string | null;
   usuario?: string | null;
 
-  // Pode vir assim (objeto):
+  // vem do Worker enriquecido:
   cliente?: ClienteObj | null;
-
-  // Ou pode vir “achatado”:
-  cliente_nome?: string | null;
-  cliente_endereco?: string | null;
-  cliente_bairro?: string | null;
-  cliente_cidade?: string | null;
-  cliente_uf?: string | null;
-  cliente_cep?: string | null;
-  cliente_telefone?: string | null;
-  cliente_plano?: string | null;
-  cliente_observacao?: string | null;
-  cliente_ll?: string | null;
 
   titulo?: string | null;
   inicioISO?: string | null;
@@ -66,46 +52,26 @@ type Dia = {
 type AgendaResp = {
   range: { inicio: string; fim: string };
   parametros: { cliente: number; max_clientes: number };
-  meta?: {
-    contratos_unicos_total?: number;
-    contratos_consultados?: number;
-    aviso?: string | null;
-  };
+  meta?: { contratos_unicos_total?: number; contratos_consultados?: number; aviso?: string | null };
   totais: { os: number; reservas: number };
   viaturas: string[];
   dias: Dia[];
+  itens?: Item[];
 };
 
 type FlatItem = Item & { _dia: string; _viatura: string };
 
-type Reserva = {
-  id: string;
-  data: string; // YYYY-MM-DD
-  hora: string; // HH:mm
-  viatura: string;
-  cliente: string;
-  servico: string;
-  motivo: string;
-  observacoes: string;
-  criadoEm: string; // ISO
-};
-
-const RESERVAS_KEY = "etech_reservas_v1";
-
 function hojeISO() {
   return new Date().toISOString().slice(0, 10);
 }
-
 function addDays(dateISO: string, days: number) {
   const d = new Date(dateISO + "T00:00:00");
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 }
-
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
-
 function statusTone(status?: string | null) {
   const s = (status || "").toLowerCase();
   if (s.includes("reserv")) return "gold";
@@ -115,7 +81,6 @@ function statusTone(status?: string | null) {
   if (s.includes("encerr")) return "muted";
   return "muted";
 }
-
 function fmtHour(h?: string | null) {
   if (!h) return "--:--";
   return h.slice(0, 5);
@@ -124,17 +89,15 @@ function fmtHour(h?: string | null) {
 function parseFromURL() {
   if (typeof window === "undefined") return null;
   const sp = new URLSearchParams(window.location.search);
-
   const inicio = sp.get("inicio") || hojeISO();
   const dias = Number(sp.get("dias") || "7") || 7;
   const viatura = sp.get("viatura") || "";
   const status = sp.get("status") || "";
   const q = sp.get("q") || "";
-  const cliente = sp.get("cliente") || "0";
+  const cliente = sp.get("cliente") || "1"; // default enriquecido
+  const max_clientes = sp.get("max_clientes") || "20";
   const group = (sp.get("group") as "dia" | "viatura") || "dia";
-  const tab = (sp.get("tab") as "agenda" | "reservas") || "agenda";
-
-  return { inicio, dias, viatura, status, q, cliente, group, tab };
+  return { inicio, dias, viatura, status, q, cliente, max_clientes, group };
 }
 
 function pushToURL(state: {
@@ -144,8 +107,8 @@ function pushToURL(state: {
   status: string;
   q: string;
   cliente: string;
+  max_clientes: string;
   group: "dia" | "viatura";
-  tab: "agenda" | "reservas";
 }) {
   const sp = new URLSearchParams();
   sp.set("inicio", state.inicio);
@@ -153,128 +116,29 @@ function pushToURL(state: {
   if (state.viatura) sp.set("viatura", state.viatura);
   if (state.status) sp.set("status", state.status);
   if (state.q) sp.set("q", state.q);
-  if (state.cliente) sp.set("cliente", state.cliente);
+  sp.set("cliente", state.cliente);
+  sp.set("max_clientes", state.max_clientes);
   sp.set("group", state.group);
-  sp.set("tab", state.tab);
-
-  const url = `${window.location.pathname}?${sp.toString()}`;
-  window.history.replaceState(null, "", url);
+  window.history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
 }
 
-function loadReservas(): Reserva[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(RESERVAS_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    return arr;
-  } catch {
-    return [];
-  }
-}
-
-function saveReservas(reservas: Reserva[]) {
-  localStorage.setItem(RESERVAS_KEY, JSON.stringify(reservas));
-}
-
-function onlyDigits(s: string) {
-  return (s || "").replace(/\D/g, "");
-}
-
-function toWhatsAppLink(phone: string, text?: string) {
-  const tel = onlyDigits(phone);
-  if (!tel) return null;
-  const base = `https://wa.me/${tel}`;
-  if (!text) return base;
-  return `${base}?text=${encodeURIComponent(text)}`;
-}
-
-// Normaliza cliente vindo como objeto ou achatado
-function extractCliente(it: Item) {
-  const nome =
-    it.cliente?.nome ??
-    it.cliente_nome ??
-    null;
-
-  const telefone =
-    (it.cliente?.telefones && it.cliente?.telefones[0]) ||
-    it.cliente?.telefone ||
-    it.cliente_telefone ||
-    null;
-
-  const plano =
-    it.cliente?.plano ??
-    it.cliente_plano ??
-    null;
-
-  const observacao =
-    it.cliente?.observacao ??
-    it.cliente_observacao ??
-    null;
-
-  // Endereço pode vir como texto (cliente_endereco) ou objeto (cliente.endereco)
-  const endObj = it.cliente?.endereco ?? null;
-
-  const logradouroNumero =
-    it.cliente_endereco ??
-    (endObj
-      ? [endObj.logradouro, endObj.numero].filter(Boolean).join(", ")
-      : null);
-
-  const bairro =
-    it.cliente_bairro ??
-    endObj?.bairro ??
-    null;
-
-  const cidade =
-    it.cliente_cidade ??
-    endObj?.cidade ??
-    null;
-
-  const uf =
-    it.cliente_uf ??
-    endObj?.uf ??
-    null;
-
-  const cep =
-    it.cliente_cep ??
-    endObj?.cep ??
-    null;
-
-  const ll =
-    it.cliente_ll ??
-    endObj?.ll ??
-    null;
-
-  const cidadeUf = [cidade, uf].filter(Boolean).join("/");
-
-  const enderecoLinha1 = logradouroNumero;
-  const enderecoLinha2 = [bairro, cidadeUf].filter(Boolean).join(" — ");
-
-  return {
-    nome,
-    telefone,
-    plano,
-    observacao,
-    enderecoLinha1,
-    enderecoLinha2,
-    cep,
-    ll,
-  };
+function fmtEndereco(c?: ClienteObj | null) {
+  const e = c?.endereco;
+  const linha1 = [e?.logradouro, e?.numero].filter(Boolean).join(", ");
+  const linha2 = [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/")].filter(Boolean).join(" — ");
+  return { linha1, linha2, cep: e?.cep || "", ll: e?.ll || "" };
 }
 
 export default function Page() {
   const initial = useMemo(() => parseFromURL(), []);
-
-  const [tab, setTab] = useState<"agenda" | "reservas">(initial?.tab ?? "agenda");
 
   const [inicio, setInicio] = useState(initial?.inicio ?? hojeISO());
   const [dias, setDias] = useState<number>(initial?.dias ?? 7);
   const [viatura, setViatura] = useState(initial?.viatura ?? "");
   const [status, setStatus] = useState(initial?.status ?? "");
   const [q, setQ] = useState(initial?.q ?? "");
-  const [cliente, setCliente] = useState(initial?.cliente ?? "0");
+  const [clienteFlag, setClienteFlag] = useState(initial?.cliente ?? "1");
+  const [maxClientes, setMaxClientes] = useState(initial?.max_clientes ?? "20");
   const [group, setGroup] = useState<"dia" | "viatura">(initial?.group ?? "dia");
 
   const [loading, setLoading] = useState(false);
@@ -282,26 +146,12 @@ export default function Page() {
   const [data, setData] = useState<AgendaResp | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
-  // Reservas (MVP local)
-  const [reservas, setReservas] = useState<Reserva[]>([]);
-  const [rData, setRData] = useState(hojeISO());
-  const [rHora, setRHora] = useState("08:00");
-  const [rViatura, setRViatura] = useState("");
-  const [rCliente, setRCliente] = useState("");
-  const [rServico, setRServico] = useState("");
-  const [rMotivo, setRMotivo] = useState("");
-  const [rObs, setRObs] = useState("");
-
   const fim = useMemo(() => addDays(inicio, Math.max(0, dias - 1)), [inicio, dias]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    pushToURL({ inicio, dias, viatura, status, q, cliente, group, tab });
-  }, [inicio, dias, viatura, status, q, cliente, group, tab]);
-
-  useEffect(() => {
-    setReservas(loadReservas());
-  }, []);
+    pushToURL({ inicio, dias, viatura, status, q, cliente: clienteFlag, max_clientes: maxClientes, group });
+  }, [inicio, dias, viatura, status, q, clienteFlag, maxClientes, group]);
 
   const flatItems: FlatItem[] = useMemo(() => {
     if (!data) return [];
@@ -323,33 +173,27 @@ export default function Page() {
       .filter((it) => (status ? (it.status || "").toLowerCase().includes(status.toLowerCase()) : true))
       .filter((it) => {
         if (!qq) return true;
-
-        const c = extractCliente(it);
-
+        const c = it.cliente;
+        const e = fmtEndereco(c);
         const blob = [
           it._dia,
           it._viatura,
           it.id,
           it.contrato,
-          it.contrato_status,
           it.status,
           it.motivo,
-          it.responsavel,
           it.usuario,
-          it.titulo,
-          it.tipo,
-          c.nome,
-          c.telefone,
-          c.plano,
-          c.enderecoLinha1,
-          c.enderecoLinha2,
-          c.cep,
-          c.observacao,
+          c?.nome,
+          (c?.telefones || []).join(" "),
+          c?.plano,
+          e.linha1,
+          e.linha2,
+          e.cep,
+          c?.observacao,
         ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
-
         return blob.includes(qq);
       })
       .sort((a, b) => `${a._dia} ${a.hora || ""}`.localeCompare(`${b._dia} ${b.hora || ""}`));
@@ -368,13 +212,17 @@ export default function Page() {
   async function loadAgenda() {
     setLoading(true);
     setErr(null);
-
     try {
-      const qs = new URLSearchParams({ inicio, fim, cliente: cliente || "0" });
+      const qs = new URLSearchParams({
+        inicio,
+        fim,
+        cliente: clienteFlag,
+        max_clientes: maxClientes,
+      });
+
       const resp = await fetch(`/api/agenda?${qs.toString()}`, { cache: "no-store" });
       const text = await resp.text();
       if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
-
       setData(JSON.parse(text));
       setLastUpdated(new Date().toLocaleString("pt-BR"));
     } catch (e: any) {
@@ -385,67 +233,10 @@ export default function Page() {
     }
   }
 
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      setLastUpdated((prev) => (prev ? `${prev} • link copiado` : "link copiado"));
-    } catch {
-      setLastUpdated((prev) => (prev ? `${prev} • não consegui copiar` : "não consegui copiar"));
-    }
-  }
-
-  function criarReserva() {
-    if (!rData) return alert("Informe a data.");
-    if (!rHora) return alert("Informe a hora.");
-    if (!rViatura) return alert("Selecione a viatura.");
-    if (!rCliente.trim()) return alert("Informe o cliente.");
-    if (!rServico.trim()) return alert("Informe o tipo de serviço.");
-
-    const nova: Reserva = {
-      id: (typeof crypto !== "undefined" && "randomUUID" in crypto) ? crypto.randomUUID() : String(Date.now()),
-      data: rData,
-      hora: rHora,
-      viatura: rViatura,
-      cliente: rCliente.trim(),
-      servico: rServico.trim(),
-      motivo: rMotivo.trim(),
-      observacoes: rObs.trim(),
-      criadoEm: new Date().toISOString(),
-    };
-
-    const next = [nova, ...reservas].sort((a, b) => `${a.data} ${a.hora}`.localeCompare(`${b.data} ${b.hora}`));
-    setReservas(next);
-    saveReservas(next);
-
-    setRCliente("");
-    setRServico("");
-    setRMotivo("");
-    setRObs("");
-    alert("Reserva criada (salva localmente).");
-  }
-
-  function removerReserva(id: string) {
-    const next = reservas.filter((r) => r.id !== id);
-    setReservas(next);
-    saveReservas(next);
-  }
-
   useEffect(() => {
     loadAgenda();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const resumo = useMemo(() => {
-    if (!data) return null;
-    return {
-      os: data.totais?.os ?? 0,
-      reservas: data.totais?.reservas ?? 0,
-      viaturas: data.viaturas?.length ?? 0,
-      itens: flatItems.length,
-    };
-  }, [data, flatItems.length]);
-
-  const periodoText = data ? `${data.range.inicio} → ${data.range.fim}` : "—";
 
   return (
     <div className="app">
@@ -457,405 +248,232 @@ export default function Page() {
           <div className="brand">
             <img src="/logo.png" alt="Etech" />
             <div>
-              <div className="brandTitle">Etech • Agenda</div>
-              <div className="brandSub">
-                <span className="muted">Atualizado: {lastUpdated || "—"}</span>
-              </div>
+              <div className="brandTitle">Agenda Operacional</div>
+              <div className="brandSub">Etech • SGP</div>
             </div>
           </div>
 
           <div className="periodCenter">
             <div className="periodLabel">Período</div>
-            <div className="chip">{periodoText}</div>
+            <div className="chip">
+              {inicio} <span className="muted">→</span> {fim}
+            </div>
           </div>
 
           <div className="actionsRight">
-            <button className="btn ghost" onClick={copyLink} type="button">
-              Copiar link
-            </button>
-            <button className="btn primary" onClick={loadAgenda} disabled={loading} type="button">
-              {loading ? "Atualizando…" : "Atualizar"}
+            <button className="btn primary" onClick={loadAgenda} disabled={loading}>
+              {loading ? "Carregando..." : "Atualizar"}
             </button>
           </div>
         </div>
       </header>
 
       <div className="container">
-        <div className="tabs">
-          <button className={cx("tab", tab === "agenda" && "tabActive")} onClick={() => setTab("agenda")} type="button">
-            Agenda
-          </button>
-          <button
-            className={cx("tab", tab === "reservas" && "tabActive")}
-            onClick={() => setTab("reservas")}
-            type="button"
-          >
-            Reservas
-          </button>
-        </div>
+        <section className="panel filters">
+          <div className="field">
+            <label>Início</label>
+            <input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} />
+          </div>
 
-        {tab === "agenda" && (
-          <>
-            <section className="panel filters">
-              <div className="field">
-                <label>Início</label>
-                <input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} />
-              </div>
+          <div className="field">
+            <label>Dias</label>
+            <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
+              {[1, 3, 5, 7, 10, 14].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
 
-              <div className="field">
-                <label>Dias</label>
-                <select value={String(dias)} onChange={(e) => setDias(Number(e.target.value))}>
-                  <option value="1">1</option>
-                  <option value="3">3</option>
-                  <option value="7">7</option>
-                  <option value="14">14</option>
-                </select>
-              </div>
+          <div className="field">
+            <label>Viatura</label>
+            <select value={viatura} onChange={(e) => setViatura(e.target.value)}>
+              <option value="">Todas</option>
+              {(data?.viaturas || ["VT01", "VT02", "VT03", "VT04", "VT05"]).map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
 
-              <div className="field">
-                <label>Cliente</label>
-                <input value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="0 = todos" />
-              </div>
+          <div className="field">
+            <label>Status</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="">Todos</option>
+              <option value="abert">Aberta</option>
+              <option value="execu">Em execução</option>
+              <option value="pend">Pendente</option>
+              <option value="encerr">Encerrada</option>
+              <option value="reserv">Reservado</option>
+            </select>
+          </div>
 
-              <div className="field">
-                <label>Viatura</label>
-                <select value={viatura} onChange={(e) => setViatura(e.target.value)}>
-                  <option value="">Todas</option>
-                  {(data?.viaturas || ["VT01", "VT02", "VT03", "VT04", "VT05"]).map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <div className="field">
+            <label>Cliente (enriquecer)</label>
+            <select value={clienteFlag} onChange={(e) => setClienteFlag(e.target.value)}>
+              <option value="1">Sim</option>
+              <option value="0">Não</option>
+            </select>
+          </div>
 
-              <div className="field">
-                <label>Status</label>
-                <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                  <option value="">Todos</option>
-                  <option value="abert">Aberta</option>
-                  <option value="execu">Em execução</option>
-                  <option value="pend">Pendente</option>
-                  <option value="encerr">Encerrada</option>
-                  <option value="reserv">Reservado</option>
-                </select>
-              </div>
+          <div className="field">
+            <label>Max clientes</label>
+            <input value={maxClientes} onChange={(e) => setMaxClientes(e.target.value)} />
+          </div>
 
-              <div className="field grow">
-                <label>Busca</label>
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="OS, contrato, cliente, endereço, plano…" />
-              </div>
+          <div className="field">
+            <label>Agrupar</label>
+            <select value={group} onChange={(e) => setGroup(e.target.value as any)}>
+              <option value="dia">Por dia</option>
+              <option value="viatura">Por viatura</option>
+            </select>
+          </div>
 
-              <div className="field">
-                <label>Agrupar</label>
-                <select value={group} onChange={(e) => setGroup(e.target.value as any)}>
-                  <option value="dia">Por dia</option>
-                  <option value="viatura">Por viatura</option>
-                </select>
-              </div>
-            </section>
+          <div className="field grow">
+            <label>Busca</label>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cliente, contrato, endereço, plano..." />
+          </div>
+        </section>
 
-            {err && (
-              <section className="panel error">
-                <div className="errorTitle">Erro ao carregar</div>
-                <div className="errorMsg">{err}</div>
-              </section>
-            )}
-
-            {resumo && (
-              <section className="stats">
-                <div className="stat">
-                  <div className="statLabel">OS</div>
-                  <div className="statValue">{resumo.os}</div>
-                </div>
-                <div className="stat">
-                  <div className="statLabel">Reservas</div>
-                  <div className="statValue">{resumo.reservas}</div>
-                </div>
-                <div className="stat">
-                  <div className="statLabel">Viaturas</div>
-                  <div className="statValue">{resumo.viaturas}</div>
-                </div>
-                <div className="stat">
-                  <div className="statLabel">Itens</div>
-                  <div className="statValue">{resumo.itens}</div>
-                </div>
-              </section>
-            )}
-
-            <main className="content">
-              {!loading && !err && grouped.length === 0 ? (
-                <section className="panel empty">
-                  <div className="emptyTitle">Nada por aqui</div>
-                  <div className="muted">Sem registros para o filtro informado.</div>
-                </section>
-              ) : (
-                <div className={cx("grid", group === "dia" && "gridDays")}>
-                  {grouped.map(([key, list]) => (
-                    <section key={key} className="col">
-                      <div className="colHead">
-                        <div className="colTitle">{key}</div>
-                        <div className="chip">{list.length} itens</div>
-                      </div>
-
-                      <div className="cards">
-                        {list.map((it) => {
-                          const tone = statusTone(it.status);
-                          const c = extractCliente(it);
-
-                          const waLink = c.telefone
-                            ? toWhatsAppLink(c.telefone, `Olá! Sobre a OS ${it.id} (contrato ${it.contrato || "—"}).`)
-                            : null;
-
-                          return (
-                            <article key={`${it.tipo}-${it.id}-${it._viatura}-${it._dia}`} className={cx("card", `tone-${tone}`)}>
-                              <div className="cardTop">
-                                <div className="time">{fmtHour(it.hora)}</div>
-
-                                <div className="badges">
-                                  <span className="badge">{it._viatura}</span>
-                                  <span className="badge ghost">{(it.tipo || "item").toUpperCase()}</span>
-                                </div>
-                              </div>
-
-                              <div className="cardTitle">
-                                OS {it.id} <span className="muted">•</span> <span className="muted">{it.status || "—"}</span>
-                              </div>
-
-                              <div className="cardGrid">
-                                {/* COLUNA: Cliente */}
-                                <div className="cardBlock">
-                                  <div className="blockTitle">Cliente</div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Nome</span>
-                                    <span className="vWrap">{c.nome || "—"}</span>
-                                  </div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Contato</span>
-                                    <span className="v">
-                                      {c.telefone || "—"}
-                                    </span>
-                                  </div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Plano</span>
-                                    <span className="vWrap">{c.plano || "—"}</span>
-                                  </div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Endereço</span>
-                                    <span className="vWrap">
-                                      {c.enderecoLinha1 || "—"}
-                                      {c.enderecoLinha2 ? <><br />{c.enderecoLinha2}</> : null}
-                                      {c.cep ? <><br /><span className="muted">CEP:</span> {c.cep}</> : null}
-                                    </span>
-                                  </div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Obs</span>
-                                    <span className="vWrap">{c.observacao || "—"}</span>
-                                  </div>
-
-                                  <div className="miniActions">
-                                    {waLink && (
-                                      <a className="miniBtn" href={waLink} target="_blank" rel="noreferrer">
-                                        WhatsApp
-                                      </a>
-                                    )}
-                                    {c.telefone && (
-                                      <button
-                                        className="miniBtn ghost"
-                                        type="button"
-                                        onClick={async () => {
-                                          try {
-                                            await navigator.clipboard.writeText(c.telefone || "");
-                                          } catch {}
-                                        }}
-                                      >
-                                        Copiar telefone
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* COLUNA: Serviço */}
-                                <div className="cardBlock">
-                                  <div className="blockTitle">Serviço</div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Contrato</span>
-                                    <span className="v">{it.contrato || "—"}</span>
-                                  </div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Status contrato</span>
-                                    <span className="vWrap">{it.contrato_status || "—"}</span>
-                                  </div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Data</span>
-                                    <span className="v">{it._dia || "—"}</span>
-                                  </div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Hora</span>
-                                    <span className="v">{fmtHour(it.hora)}</span>
-                                  </div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Motivo</span>
-                                    <span className="vWrap">{it.motivo || "—"}</span>
-                                  </div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Responsável</span>
-                                    <span className="vWrap">{it.responsavel || it._viatura || "—"}</span>
-                                  </div>
-
-                                  <div className="metaRow">
-                                    <span className="k">Usuário</span>
-                                    <span className="v">{it.usuario || "—"}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </article>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-              )}
-            </main>
-          </>
+        {err && (
+          <section className="panel error">
+            <div className="errorTitle">Erro</div>
+            <div className="errorMsg">{err}</div>
+          </section>
         )}
 
-        {tab === "reservas" && (
-          <main className="content">
-            <section className="panel reservaPanel">
-              <div className="reservaHeader">
-                <div>
-                  <div className="reservaTitle">Criar reserva</div>
-                  <div className="muted small">Neste MVP, as reservas são salvas no navegador (localStorage).</div>
-                </div>
+        {data && (
+          <section className="stats">
+            <div className="stat">
+              <div className="statLabel">OS</div>
+              <div className="statValue">{data.totais?.os ?? 0}</div>
+            </div>
+            <div className="stat">
+              <div className="statLabel">Contratos únicos</div>
+              <div className="statValue">{data.meta?.contratos_unicos_total ?? 0}</div>
+            </div>
+            <div className="stat">
+              <div className="statLabel">Consultados</div>
+              <div className="statValue">{data.meta?.contratos_consultados ?? 0}</div>
+            </div>
+            <div className="stat">
+              <div className="statLabel">Atualização</div>
+              <div className="statValue" style={{ fontSize: 14, lineHeight: "20px" }}>
+                {lastUpdated || "—"}
               </div>
+            </div>
+          </section>
+        )}
 
-              <div className="formGrid">
-                <div className="field">
-                  <label>Data</label>
-                  <input type="date" value={rData} onChange={(e) => setRData(e.target.value)} />
+        <main className="content">
+          <div className={cx("grid", group === "dia" && "gridDays")}>
+            {grouped.map(([key, list]) => (
+              <section key={key} className="col">
+                <div className="colHead">
+                  <div className="colTitle">{key}</div>
+                  <div className="chip">{list.length} itens</div>
                 </div>
 
-                <div className="field">
-                  <label>Hora</label>
-                  <input type="time" value={rHora} onChange={(e) => setRHora(e.target.value)} />
-                </div>
-
-                <div className="field">
-                  <label>Viatura</label>
-                  <select value={rViatura} onChange={(e) => setRViatura(e.target.value)}>
-                    <option value="">Selecione</option>
-                    {(data?.viaturas || ["VT01", "VT02", "VT03", "VT04", "VT05"]).map((v) => (
-                      <option key={v} value={v}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="field grow" style={{ gridColumn: "1 / -1" }}>
-                  <label>Cliente</label>
-                  <input value={rCliente} onChange={(e) => setRCliente(e.target.value)} placeholder="Nome/ID do cliente" />
-                </div>
-
-                <div className="field grow" style={{ gridColumn: "1 / -1" }}>
-                  <label>Tipo de serviço</label>
-                  <input value={rServico} onChange={(e) => setRServico(e.target.value)} placeholder="Instalação, manutenção, visita técnica..." />
-                </div>
-
-                <div className="field grow" style={{ gridColumn: "1 / -1" }}>
-                  <label>Motivo</label>
-                  <input value={rMotivo} onChange={(e) => setRMotivo(e.target.value)} placeholder="Ex.: Instalação" />
-                </div>
-
-                <div className="field grow" style={{ gridColumn: "1 / -1" }}>
-                  <label>Observações</label>
-                  <textarea value={rObs} onChange={(e) => setRObs(e.target.value)} />
-                </div>
-              </div>
-
-              <div className="reservaActions">
-                <button className="btn primary" type="button" onClick={criarReserva}>
-                  Salvar reserva
-                </button>
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={() => {
-                    setRCliente("");
-                    setRServico("");
-                    setRMotivo("");
-                    setRObs("");
-                  }}
-                >
-                  Limpar
-                </button>
-              </div>
-            </section>
-
-            <section className="panel reservaList">
-              <div className="reservaTitle">Reservas criadas</div>
-
-              {reservas.length === 0 ? (
-                <div className="muted">Nenhuma reserva criada ainda.</div>
-              ) : (
-                <div className="reservaItems">
-                  {reservas.map((r) => (
-                    <div key={r.id} className="reservaItem">
-                      <div className="reservaItemMain">
-                        <div className="reservaLine1">
-                          <span className="chip">{r.data}</span>
-                          <span className="chip">{r.hora}</span>
-                          <span className="chip">{r.viatura}</span>
-                        </div>
-                        <div className="reservaLine2">
-                          <b>{r.cliente}</b> — <span className="muted">{r.servico}</span>
-                        </div>
-                        {(r.motivo || r.observacoes) && (
-                          <div className="reservaLine3">
-                            {r.motivo && (
-                              <>
-                                <span className="muted">Motivo:</span> <span>{r.motivo}</span>
-                              </>
-                            )}
-                            {r.motivo && r.observacoes ? <span className="sep" /> : null}
-                            {r.observacoes && (
-                              <>
-                                <span className="muted">Obs:</span> <span>{r.observacoes}</span>
-                              </>
-                            )}
+                <div className="cards">
+                  {list.map((it) => {
+                    const tone = statusTone(it.status);
+                    const c = it.cliente;
+                    const e = fmtEndereco(c);
+                    const tel = c?.telefones?.[0] || "";
+                    return (
+                      <article key={`${it.tipo}-${it.id}-${it._viatura}-${it._dia}`} className={cx("card", `tone-${tone}`)}>
+                        <div className="cardTop">
+                          <div className="time">{fmtHour(it.hora)}</div>
+                          <div className="badges">
+                            <span className="badge">{it._viatura}</span>
+                            <span className="badge ghost">{it.tipo?.toUpperCase?.() || "ITEM"}</span>
                           </div>
-                        )}
-                      </div>
+                        </div>
 
-                      <div className="reservaItemActions">
-                        <button className="btn danger" type="button" onClick={() => removerReserva(r.id)}>
-                          Excluir
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                        <div className="cardTitle">
+                          OS {it.id} <span className="muted">•</span> <span className="muted">{it.status || "—"}</span>
+                        </div>
+
+                        <div className="cardGrid">
+                          <div className="cardBlock">
+                            <div className="blockTitle">Cliente</div>
+
+                            <div className="metaRow">
+                              <span className="k">Nome</span>
+                              <span className="vWrap">{c?.nome || "—"}</span>
+                            </div>
+
+                            <div className="metaRow">
+                              <span className="k">Contato</span>
+                              <span className="v">{tel || "—"}</span>
+                            </div>
+
+                            <div className="metaRow">
+                              <span className="k">Plano</span>
+                              <span className="vWrap">{c?.plano || "—"}</span>
+                            </div>
+
+                            <div className="metaRow">
+                              <span className="k">Obs.</span>
+                              <span className="vWrap">{c?.observacao || "—"}</span>
+                            </div>
+
+                            <div className="metaRow">
+                              <span className="k">Endereço</span>
+                              <span className="vWrap">
+                                {[e.linha1, e.linha2].filter(Boolean).join("\n") || "—"}
+                              </span>
+                            </div>
+
+                            <div className="metaRow">
+                              <span className="k">CEP</span>
+                              <span className="v">{e.cep || "—"}</span>
+                            </div>
+                          </div>
+
+                          <div className="cardBlock">
+                            <div className="blockTitle">Serviço</div>
+
+                            <div className="metaRow">
+                              <span className="k">Contrato</span>
+                              <span className="v">{it.contrato || "—"}</span>
+                            </div>
+
+                            <div className="metaRow">
+                              <span className="k">Motivo</span>
+                              <span className="vWrap">{it.motivo || "—"}</span>
+                            </div>
+
+                            <div className="metaRow">
+                              <span className="k">Usuário</span>
+                              <span className="v">{it.usuario || "—"}</span>
+                            </div>
+
+                            <div className="metaRow">
+                              <span className="k">Resp.</span>
+                              <span className="v">{it.responsavel || "—"}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
-              )}
-            </section>
-          </main>
-        )}
+              </section>
+            ))}
+          </div>
 
-        <footer className="footer">
-          <div className="muted small">Desenvolvido por Paulo Sales.</div>
-        </footer>
+          {!loading && !err && grouped.length === 0 && (
+            <section className="panel empty">
+              <div className="emptyTitle">Sem registros</div>
+              <div className="muted small">Nenhum item para os filtros informados.</div>
+            </section>
+          )}
+        </main>
+
+        <footer className="footer">Desenvolvido por Paulo Sales.</footer>
       </div>
     </div>
   );
