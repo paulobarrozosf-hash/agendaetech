@@ -1,13 +1,12 @@
 :root{
-  /* Identidade visual (ajuste fino se quiser) */
-  --navy: #071A2B;        /* azul marinho */
-  --navy2:#0A2440;        /* variação */
-  --sky:  #4DA3FF;        /* azul claro */
-  --sky2: #7CC4FF;        /* variação */
-  --gray: #94A3B8;        /* cinza */
+  /* Identidade visual (Azul marinho, Azul claro, Cinza, Branco) */
+  --navy: #071A2B;
+  --navy2:#0A2440;
+  --sky:  #4DA3FF;
+  --sky2: #7CC4FF;
+  --gray: #94A3B8;
   --white:#FFFFFF;
 
-  /* UI tokens */
   --bg: #050A12;
   --panel: rgba(255,255,255,.06);
   --panel2: rgba(255,255,255,.09);
@@ -24,6 +23,7 @@
 
 *{ box-sizing: border-box; }
 html, body { height: 100%; }
+
 body{
   margin:0;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial;
@@ -36,7 +36,19 @@ body{
   overflow-x: hidden;
 }
 
-/* “fundo tecnológico”: grid + ruído leve */
+a{ color: inherit; text-decoration: none; }
+code{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  color: rgba(234,242,255,.92);
+}
+
+.app{
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fundo tech */
 .bgGrid{
   position: fixed;
   inset: 0;
@@ -57,25 +69,15 @@ body{
   opacity: .6;
 }
 
-a{ color: inherit; text-decoration: none; }
-code{
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  color: rgba(234,242,255,.92);
-}
-
-/* Layout */
-.app{
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
 .container{
   width: min(1280px, calc(100% - 32px));
   margin: 0 auto;
 }
 
-/* Topbar (glass) */
+.muted{ color: var(--muted); }
+.small{ font-size: 12px; }
+
+/* Topbar */
 .topbar{
   position: sticky;
   top: 0;
@@ -86,43 +88,19 @@ code{
 }
 
 .topbarInner{
-  display:grid;
+  display: grid;
   grid-template-columns: 1fr auto 1fr;
-  align-items:center;
-  gap: 14px;
+  align-items: center;
+  gap: 18px;
   padding: 14px 0;
 }
 
-.brand{ justify-self: start; }
-.periodCenter{
-  justify-self: center;
-  text-align: center;
+.brand{
   display:flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.periodTitle{
-  font-weight: 950;
-  letter-spacing: .2px;
-}
-
-.actionsRight{
-  justify-self: end;
-  display:flex;
-  gap: 10px;
   align-items:center;
-  flex-wrap: wrap;
-}
-
-/* Em telas pequenas volta a empilhar */
-@media (max-width: 900px){
-  .topbarInner{
-    grid-template-columns: 1fr;
-  }
-  .periodCenter, .actionsRight, .brand{
-    justify-self: start;
-    text-align: left;
-  }
+  gap: 12px;
+  justify-self: start;
+  min-width: 260px;
 }
 .brand img{
   width: 44px;
@@ -134,12 +112,12 @@ code{
   box-shadow: 0 10px 25px rgba(0,0,0,.35);
 }
 .brandTitle{
-  font-weight: 900;
+  font-weight: 950;
   letter-spacing: .2px;
   line-height: 1.05;
 }
 .brandSub{
-  margin-top: 2px;
+  margin-top: 4px;
   font-size: 12px;
   color: var(--muted);
   display:flex;
@@ -147,7 +125,40 @@ code{
   flex-wrap: wrap;
 }
 
-/* Chips / badges */
+/* Centro (período) */
+.periodCenter{
+  justify-self: center;
+  text-align: center;
+  display:flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.periodLabel{
+  font-size: 12px;
+  color: rgba(234,242,255,.78);
+  letter-spacing: .2px;
+}
+
+/* Direita (ações) */
+.actionsRight{
+  justify-self: end;
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px){
+  .topbarInner{
+    grid-template-columns: 1fr;
+  }
+  .periodCenter, .actionsRight, .brand{
+    justify-self: start;
+    text-align: left;
+  }
+}
+
+/* Chips */
 .chip{
   display:inline-flex;
   align-items:center;
@@ -159,11 +170,8 @@ code{
   color: rgba(234,242,255,.78);
   font-size: 12px;
 }
-.dot{ opacity: .35; }
 
 /* Buttons */
-.btnRow{ display:flex; gap: 10px; align-items:center; flex-wrap: wrap; }
-
 .btn{
   height: 40px;
   padding: 0 14px;
@@ -171,7 +179,7 @@ code{
   border: 1px solid rgba(148,163,184,.18);
   background: rgba(255,255,255,.06);
   color: var(--text);
-  font-weight: 850;
+  font-weight: 900;
   cursor: pointer;
   transition: transform .12s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease, opacity .18s ease;
   box-shadow: 0 10px 22px rgba(0,0,0,.22);
@@ -184,15 +192,28 @@ code{
 .btn:active{ transform: translateY(0px) scale(.99); }
 .btn:disabled{ opacity: .6; cursor: not-allowed; box-shadow: none; }
 
-.btnPrimary{
+.btn.primary{
   border: 0;
   color: #06101B;
   background: linear-gradient(135deg, var(--sky), var(--sky2));
   box-shadow: 0 14px 30px rgba(77,163,255,.22);
 }
-.btnPrimary:hover{
+.btn.primary:hover{
   background: linear-gradient(135deg, #5EB0FF, #90D2FF);
   box-shadow: 0 16px 38px rgba(77,163,255,.25);
+}
+
+.btn.ghost{
+  background: rgba(255,255,255,.04);
+}
+
+.btn.danger{
+  border-color: rgba(239,68,68,.35);
+  background: rgba(239,68,68,.10);
+}
+.btn.danger:hover{
+  border-color: rgba(239,68,68,.55);
+  background: rgba(239,68,68,.14);
 }
 
 /* Panels */
@@ -201,6 +222,30 @@ code{
   border: 1px solid rgba(148,163,184,.18);
   background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.04));
   box-shadow: var(--shadow2);
+}
+
+/* Tabs */
+.tabs{
+  margin-top: 14px;
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.tab{
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  font-weight: 950;
+  cursor: pointer;
+  transition: transform .12s ease, background .18s ease, border-color .18s ease;
+}
+.tab:hover{ transform: translateY(-1px); border-color: rgba(124,196,255,.28); }
+.tabActive{
+  background: linear-gradient(135deg, rgba(77,163,255,.22), rgba(124,196,255,.12));
+  border-color: rgba(124,196,255,.35);
 }
 
 /* Filters */
@@ -219,22 +264,25 @@ code{
   min-width: 150px;
 }
 .field.grow{ flex: 1; min-width: 240px; }
-.label{
+
+label{
   font-size: 12px;
-  color: rgba(234,242,255,.72);
+  color: rgba(234,242,255,.78);
 }
 
-.input, .select{
-  height: 40px;
+input, select, textarea{
   border-radius: 14px;
   border: 1px solid rgba(148,163,184,.18);
   background: rgba(6,10,18,.55);
   color: var(--text);
-  padding: 0 12px;
+  padding: 10px 12px;
   outline: none;
   transition: box-shadow .18s ease, border-color .18s ease, background .18s ease;
 }
-.input:focus, .select:focus{
+input, select{ height: 40px; }
+textarea{ min-height: 92px; resize: vertical; }
+
+input:focus, select:focus, textarea:focus{
   box-shadow: var(--focus);
   border-color: rgba(77,163,255,.45);
   background: rgba(6,10,18,.72);
@@ -260,13 +308,14 @@ code{
   .stats{ grid-template-columns: repeat(2, minmax(160px, 1fr)); }
 }
 
-/* Content grid */
+/* Content */
 .content{
   margin-top: 14px;
   padding-bottom: 18px;
   flex: 1;
 }
 
+/* Grid */
 .grid{
   display:grid;
   grid-template-columns: repeat(3, minmax(300px, 1fr));
@@ -280,7 +329,6 @@ code{
   .grid{ grid-template-columns: 1fr; }
 }
 
-/* Columns */
 .col{
   border-radius: var(--radius);
   overflow:hidden;
@@ -288,7 +336,6 @@ code{
   background: rgba(6,10,18,.35);
   box-shadow: var(--shadow2);
 }
-
 .colHead{
   padding: 10px 12px;
   display:flex;
@@ -303,7 +350,6 @@ code{
   letter-spacing: .2px;
   color: rgba(124,196,255,.92);
 }
-
 .cards{
   padding: 10px;
   display:flex;
@@ -320,7 +366,6 @@ code{
   background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.04));
   box-shadow: 0 12px 26px rgba(0,0,0,.25);
   overflow: hidden;
-  transform: translateZ(0);
   transition: transform .12s ease, border-color .18s ease;
   border-left: 6px solid rgba(148,163,184,.85);
 }
@@ -351,7 +396,7 @@ code{
   color: rgba(234,242,255,.9);
   font-weight: 850;
 }
-.badgeGhost{
+.badge.ghost{
   border-color: rgba(148,163,184,.22);
   background: rgba(148,163,184,.08);
   color: rgba(234,242,255,.75);
@@ -361,26 +406,25 @@ code{
   margin-top: 8px;
   font-weight: 950;
 }
+
+/* Aqui está o fix do “MotivoInstalação”: mais espaço + quebra correta */
 .cardMeta{
   margin-top: 10px;
   display:flex;
   flex-direction: column;
-  gap: 8px;            /* mais espaço vertical */
+  gap: 10px;
 }
-
 .metaRow{
   display:flex;
   justify-content: space-between;
-  gap: 12px;           /* espaço entre label e valor */
+  gap: 12px;
   align-items: baseline;
 }
-
 .k{
   font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
 }
-
 .v{
   font-size: 12px;
   color: rgba(234,242,255,.86);
@@ -390,37 +434,107 @@ code{
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* Se você preferir NÃO cortar e sim quebrar linha em campos longos (motivo/tipo):
-   troque a regra .v acima por esta (ou crie uma variação .vWrap só pra motivo) */
+/* para motivos e textos maiores */
 .vWrap{
   font-size: 12px;
   color: rgba(234,242,255,.86);
   text-align: right;
   max-width: 72%;
   white-space: normal;
-  overflow: visible;
-  text-overflow: initial;
   word-break: break-word;
 }
 
-/* Status tones */
+/* Tones */
+.tone-gold{ border-left-color: #F2C811; }
 .tone-green{ border-left-color: #22C55E; }
 .tone-orange{ border-left-color: #FB923C; }
 .tone-red{ border-left-color: #EF4444; }
-.tone-gold{ border-left-color: #F2C811; }
 .tone-muted{ border-left-color: rgba(148,163,184,.75); opacity: .95; }
 
 /* Error / Empty */
-.notice{
+.error{
+  margin-top: 12px;
+  padding: 12px;
+  border-color: rgba(239,68,68,.35);
+  background: rgba(58,13,13,.40);
+}
+.errorTitle{ font-weight: 950; }
+.errorMsg{ margin-top: 6px; color: rgba(254,202,202,.95); }
+
+.empty{
+  padding: 14px;
+}
+.emptyTitle{ font-weight: 950; margin-bottom: 4px; }
+
+/* Reservas */
+.reservaPanel{
+  padding: 12px;
+}
+.reservaHeader{
+  display:flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+.reservaTitle{
+  font-weight: 950;
+  letter-spacing: .2px;
+  margin-bottom: 6px;
+}
+
+.formGrid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 10px;
+}
+@media (max-width: 900px){
+  .formGrid{ grid-template-columns: 1fr; }
+}
+
+.reservaActions{
+  display:flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.reservaList{
   margin-top: 12px;
   padding: 12px;
 }
-.noticeTitle{ font-weight: 950; }
-.noticeMsg{ margin-top: 6px; color: rgba(254,202,202,.95); }
-.muted{ color: var(--muted); }
-.small{ font-size: 12px; }
+.reservaItems{
+  display:flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.reservaItem{
+  border-radius: 16px;
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(6,10,18,.35);
+  padding: 12px;
+  display:flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: start;
+}
+.reservaItemMain{ flex: 1; }
+.reservaLine1{ display:flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.reservaLine2{ margin-bottom: 6px; }
+.reservaLine3{
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: rgba(234,242,255,.86);
+}
+.sep{
+  width: 1px;
+  background: rgba(148,163,184,.25);
+  margin: 0 2px;
+}
+.reservaItemActions{ display:flex; gap: 8px; }
 
+/* Footer */
 .footer{
   padding: 12px 0 20px;
   color: rgba(234,242,255,.65);
