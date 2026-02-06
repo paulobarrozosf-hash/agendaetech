@@ -95,15 +95,14 @@ function parseFromURL() {
   const sp = new URLSearchParams(window.location.search);
 
   const inicio = sp.get("inicio") || hojeISO();
-  const dias = Number(sp.get("dias") || "7") || 7;
+  const dias = Number(sp.get("dias") || "14") || 14;
 
   const viatura = sp.get("viatura") || "";
   const status = sp.get("status") || "";
   const q = sp.get("q") || "";
 
-  // Default: SIM + alto, para vir “tudo” (o Worker ainda tem hard cap)
   const cliente = sp.get("cliente") || "1";
-  const max_clientes = sp.get("max_clientes") || "300";
+  const max_clientes = sp.get("max_clientes") || "200";
 
   const group = (sp.get("group") as "dia" | "viatura") || "dia";
 
@@ -132,17 +131,12 @@ function pushToURL(state: {
   window.history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
 }
 
-function formatEndereco(c?: ClienteObj | null) {
+function formatEnderecoLinha(c?: ClienteObj | null) {
   const e = c?.endereco;
-  const linha1 = [e?.logradouro, e?.numero].filter(Boolean).join(", ");
-  const linha2 = [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/")].filter(Boolean).join(" — ");
-  return {
-    linha1: linha1 || "",
-    linha2: linha2 || "",
-    complemento: (e?.complemento || "").toString(),
-    cep: (e?.cep || "").toString(),
-    ll: (e?.ll || "").toString(),
-  };
+  const l1 = [e?.logradouro, e?.numero].filter(Boolean).join(", ");
+  const l2 = [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/")].filter(Boolean).join(" — ");
+  const compl = e?.complemento ? String(e.complemento) : "";
+  return [l1, l2, compl].filter(Boolean).join(" • ");
 }
 
 function firstPhones(c?: ClienteObj | null) {
@@ -150,18 +144,23 @@ function firstPhones(c?: ClienteObj | null) {
   return [t[0], t[1]].filter(Boolean).join(" / ");
 }
 
+function safeText(x: any) {
+  const s = (x ?? "").toString().trim();
+  return s.length ? s : "—";
+}
+
 export default function Page() {
   const initial = useMemo(() => parseFromURL(), []);
 
   const [inicio, setInicio] = useState(initial?.inicio ?? hojeISO());
-  const [dias, setDias] = useState<number>(initial?.dias ?? 7);
+  const [dias, setDias] = useState<number>(initial?.dias ?? 14);
 
   const [viatura, setViatura] = useState(initial?.viatura ?? "");
   const [status, setStatus] = useState(initial?.status ?? "");
   const [q, setQ] = useState(initial?.q ?? "");
 
   const [clienteFlag, setClienteFlag] = useState(initial?.cliente ?? "1");
-  const [maxClientes, setMaxClientes] = useState(initial?.max_clientes ?? "300");
+  const [maxClientes, setMaxClientes] = useState(initial?.max_clientes ?? "200");
 
   const [group, setGroup] = useState<"dia" | "viatura">(initial?.group ?? "dia");
 
@@ -239,10 +238,7 @@ export default function Page() {
       .filter((it) => (status ? (it.status || "").toLowerCase().includes(status.toLowerCase()) : true))
       .filter((it) => {
         if (!qq) return true;
-
         const c = it.cliente;
-        const e = formatEndereco(c);
-
         const blob = [
           it._dia,
           it._viatura,
@@ -257,16 +253,13 @@ export default function Page() {
           c?.email,
           c?.plano,
           c?.observacao,
-          e.linha1,
-          e.linha2,
-          e.complemento,
-          e.cep,
-          e.ll,
+          formatEnderecoLinha(c),
+          c?.endereco?.cep,
+          c?.endereco?.ll,
         ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
-
         return blob.includes(qq);
       })
       .sort((a, b) => `${a._dia} ${a.hora || ""}`.localeCompare(`${b._dia} ${b.hora || ""}`));
@@ -292,8 +285,8 @@ export default function Page() {
           <div className="brand">
             <div className="brandLogo">E</div>
             <div>
-              <div className="brandTitle">Agenda Etech</div>
-              <div className="brandSub">SGP • Viaturas</div>
+              <div className="brandTitle">Agenda Operacional</div>
+              <div className="brandSub">Etech • SGP</div>
             </div>
           </div>
 
@@ -309,7 +302,6 @@ export default function Page() {
             <button className="btn primary" onClick={loadAgenda} disabled={loading}>
               {loading ? "Carregando..." : "Atualizar"}
             </button>
-            <div className="chip small">Atualizado: {lastUpdated}</div>
           </div>
         </div>
       </header>
@@ -357,10 +349,10 @@ export default function Page() {
           </div>
 
           <div className="field">
-            <label>Dados do cliente</label>
+            <label>Cliente (enriquecer)</label>
             <select value={clienteFlag} onChange={(e) => setClienteFlag(e.target.value)}>
-              <option value="1">Buscar (mais pesado)</option>
-              <option value="0">Não buscar (mais leve)</option>
+              <option value="1">Sim</option>
+              <option value="0">Não</option>
             </select>
           </div>
 
@@ -379,7 +371,11 @@ export default function Page() {
 
           <div className="field grow">
             <label>Busca</label>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cliente, endereço, contrato, plano..." />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Cliente, contrato, endereço, plano..."
+            />
           </div>
         </section>
 
@@ -393,7 +389,7 @@ export default function Page() {
         {data ? (
           <section className="stats">
             <div className="stat">
-              <div className="statLabel">O.S</div>
+              <div className="statLabel">OS</div>
               <div className="statValue">{data.totais?.os ?? 0}</div>
             </div>
             <div className="stat">
@@ -405,8 +401,10 @@ export default function Page() {
               <div className="statValue">{data.meta?.contratos_consultados ?? 0}</div>
             </div>
             <div className="stat">
-              <div className="statLabel">Max clientes</div>
-              <div className="statValue">{data.parametros?.max_clientes ?? 0}</div>
+              <div className="statLabel">Atualização</div>
+              <div className="statValue" style={{ fontSize: 14, lineHeight: "18px" }}>
+                {lastUpdated}
+              </div>
             </div>
           </section>
         ) : null}
@@ -424,84 +422,95 @@ export default function Page() {
                   {list.map((it) => {
                     const c = it.cliente;
                     const e = c?.endereco;
-                    const end = formatEndereco(c);
 
                     return (
                       <article
                         key={`${it.tipo}-${it.id}-${it._viatura}-${it._dia}`}
-                        className={cx("card2", `tone-${statusTone(it.status)}`)}
+                        className={cx("card3", `tone-${statusTone(it.status)}`)}
                       >
-                        <div className="card2Top">
-                          <div className="card2Time">{fmtHour(it.hora)}</div>
-                          <div className="card2Badges">
+                        <div className="card3Top">
+                          <div className="card3Time">{fmtHour(it.hora)}</div>
+
+                          <div className="card3Badges">
                             <span className="pill">{it._viatura}</span>
                             <span className="pill ghost">OS {it.id}</span>
-                            <span className="pill ghost">{it.status || "—"}</span>
+                            <span className="pill ghost">{safeText(it.status)}</span>
                           </div>
                         </div>
 
-                        <div className="card2Title">
-                          {it.motivo || "—"} <span className="muted">•</span> Contrato {it.contrato || "—"}
+                        <div className="card3Title">
+                          <span className="titleMain">{safeText(it.motivo)}</span>
+                          <span className="titleSub">
+                            Contrato <b>{safeText(it.contrato)}</b>
+                          </span>
                         </div>
 
-                        <div className="card2Body">
-                          <div className="card2Block">
-                            <div className="card2BlockTitle">Cliente</div>
+                        <div className="card3Body">
+                          <div className="card3Block">
+                            <div className="card3BlockTitle">Cliente</div>
 
                             <div className="kv">
                               <span className="k">Nome</span>
-                              <span className="v">{c?.nome || "—"}</span>
+                              <span className="v vClamp2">{safeText(c?.nome)}</span>
                             </div>
 
                             <div className="kv">
                               <span className="k">Contato</span>
-                              <span className="v">{firstPhones(c) || "—"}</span>
+                              <span className="v">{safeText(firstPhones(c))}</span>
+                            </div>
+
+                            <div className="kv">
+                              <span className="k">Email</span>
+                              <span className="v vClamp1">{safeText(c?.email)}</span>
                             </div>
 
                             <div className="kv">
                               <span className="k">Plano</span>
-                              <span className="v">{c?.plano || "—"}</span>
+                              <span className="v vClamp2">{safeText(c?.plano)}</span>
                             </div>
 
                             <div className="kv">
                               <span className="k">Endereço</span>
-                              <span className="v">
-                                {[end.linha1, end.linha2, end.complemento].filter(Boolean).join(" • ") || "—"}
-                              </span>
+                              <span className="v vClamp3">{safeText(formatEnderecoLinha(c))}</span>
                             </div>
 
                             <div className="kv">
                               <span className="k">CEP</span>
-                              <span className="v">{e?.cep || "—"}</span>
+                              <span className="v">{safeText(e?.cep)}</span>
                             </div>
                           </div>
 
-                          <div className="card2Block">
-                            <div className="card2BlockTitle">Serviço</div>
+                          <div className="card3Block">
+                            <div className="card3BlockTitle">Serviço</div>
+
+                            <div className="kv">
+                              <span className="k">Status</span>
+                              <span className="v">{safeText(it.status)}</span>
+                            </div>
 
                             <div className="kv">
                               <span className="k">Usuário</span>
-                              <span className="v">{it.usuario || "—"}</span>
+                              <span className="v vClamp1">{safeText(it.usuario)}</span>
                             </div>
 
                             <div className="kv">
-                              <span className="k">Equipe</span>
-                              <span className="v">{it.responsavel || "—"}</span>
+                              <span className="k">Resp.</span>
+                              <span className="v vClamp1">{safeText(it.responsavel)}</span>
                             </div>
 
                             <div className="kv">
-                              <span className="k">Contrato</span>
-                              <span className="v">{it.contrato || "—"}</span>
-                            </div>
-
-                            <div className="kv">
-                              <span className="k">Status contrato</span>
-                              <span className="v">{it.contrato_status || "—"}</span>
+                              <span className="k">C. status</span>
+                              <span className="v">{safeText(it.contrato_status)}</span>
                             </div>
 
                             <div className="kv">
                               <span className="k">LL</span>
-                              <span className="v">{e?.ll || "—"}</span>
+                              <span className="v vClamp1">{safeText(e?.ll)}</span>
+                            </div>
+
+                            <div className="kv">
+                              <span className="k">Obs.</span>
+                              <span className="v vClamp2">{safeText(c?.observacao)}</span>
                             </div>
                           </div>
                         </div>
