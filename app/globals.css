@@ -34,9 +34,18 @@ body{
   flex-direction: column;
 }
 
+/* ✅ Agora usa praticamente a tela inteira */
 .container{
-  width: min(1280px, calc(100% - 32px));
+  width: calc(100% - 28px);
   margin: 0 auto;
+  max-width: 1920px; /* sobe bem o teto, sem “amarrar” */
+}
+
+/* Em telas ultra-wide, aproveita mais ainda */
+@media (min-width: 2200px){
+  .container{
+    max-width: 2400px;
+  }
 }
 
 .muted{ color: var(--muted); }
@@ -201,7 +210,7 @@ body{
   gap: 6px;
   min-width: 150px;
 }
-.field.grow{ flex: 1; min-width: 240px; }
+.field.grow{ flex: 1; min-width: 260px; }
 
 label{
   font-size: 12px;
@@ -228,7 +237,7 @@ input:focus, select:focus{
 .stats{
   margin-top: 12px;
   display:grid;
-  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, minmax(220px, 1fr)); /* ✅ mais largo */
   gap: 12px;
 }
 .stat{
@@ -251,15 +260,23 @@ input:focus, select:focus{
   flex: 1;
 }
 
+/*
+  ✅ Grid padrão (por viatura): auto-fit para aproveitar a tela e dar cards maiores.
+*/
 .grid{
   display:grid;
-  grid-template-columns: repeat(3, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
   gap: 12px;
 }
-.gridDays{ grid-template-columns: repeat(7, minmax(260px, 1fr)); }
-@media (max-width: 1400px){
-  .gridDays{ grid-template-columns: repeat(3, minmax(280px, 1fr)); }
+
+/*
+  ✅ Grid "Por dia": também auto-fit (ao invés de tentar 7 colunas fininhas).
+  Isso deixa cada coluna (dia) mais larga e o card mostra Serviço direito.
+*/
+.gridDays{
+  grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
 }
+
 @media (max-width: 980px){
   .grid, .gridDays{ grid-template-columns: 1fr; }
 }
@@ -270,6 +287,7 @@ input:focus, select:focus{
   border: 1px solid rgba(148,163,184,.16);
   background: rgba(6,10,18,.35);
   box-shadow: var(--shadow2);
+  min-width: 0;
 }
 .colHead{
   padding: 10px 12px;
@@ -297,8 +315,9 @@ input:focus, select:focus{
   padding: 12px;
   border-radius: 18px;
   border: 1px solid rgba(148,163,184,.18);
-  background: radial-gradient(900px 300px at 10% 0%, rgba(124,196,255,.08), transparent 60%),
-              linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  background:
+    radial-gradient(900px 300px at 10% 0%, rgba(124,196,255,.08), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
   box-shadow: var(--shadow);
   transition: transform .12s ease, border-color .18s ease;
   border-left: 6px solid rgba(148,163,184,.85);
@@ -349,13 +368,17 @@ input:focus, select:focus{
   line-height: 1.25;
 }
 
+/*
+  ✅ O bloco Serviço estava “sumindo” porque ficava estreito.
+  Aqui eu dou mais espaço pra ele (1.05fr / 1.35fr).
+*/
 .card2Body{
   margin-top: 12px;
   display:grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.05fr 1.35fr; /* Cliente | Serviço */
   gap: 12px;
 }
-@media (max-width: 640px){
+@media (max-width: 720px){
   .card2Body{ grid-template-columns: 1fr; }
 }
 
@@ -364,6 +387,7 @@ input:focus, select:focus{
   border: 1px solid rgba(148,163,184,.16);
   background: rgba(6,10,18,.30);
   padding: 12px;
+  min-width: 0;
 }
 
 .card2BlockTitle{
