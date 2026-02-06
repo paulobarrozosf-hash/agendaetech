@@ -35,9 +35,7 @@ type Item = {
   motivo?: string | null;
   responsavel?: string | null;
   usuario?: string | null;
-
   cliente?: ClienteObj | null;
-
   titulo?: string | null;
   inicioISO?: string | null;
   fimISO?: string | null;
@@ -59,7 +57,6 @@ type AgendaResp = {
   totais: { os: number; reservas: number };
   viaturas: string[];
   dias: Dia[];
-  itens?: Item[];
 };
 
 type FlatItem = Item & { _dia: string; _viatura: string };
@@ -104,8 +101,9 @@ function parseFromURL() {
   const status = sp.get("status") || "";
   const q = sp.get("q") || "";
 
+  // Default: SIM + alto, para vir “tudo” (o Worker ainda tem hard cap)
   const cliente = sp.get("cliente") || "1";
-  const max_clientes = sp.get("max_clientes") || "20";
+  const max_clientes = sp.get("max_clientes") || "300";
 
   const group = (sp.get("group") as "dia" | "viatura") || "dia";
 
@@ -134,19 +132,22 @@ function pushToURL(state: {
   window.history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
 }
 
-function enderecoFormatado(c?: ClienteObj | null) {
+function formatEndereco(c?: ClienteObj | null) {
   const e = c?.endereco;
   const linha1 = [e?.logradouro, e?.numero].filter(Boolean).join(", ");
-  const cidadeUf = [e?.cidade, e?.uf].filter(Boolean).join("/");
-  const linha2 = [e?.bairro, cidadeUf].filter(Boolean).join(" — ");
-  const compl = e?.complemento ? String(e.complemento) : "";
+  const linha2 = [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/")].filter(Boolean).join(" — ");
   return {
     linha1: linha1 || "",
     linha2: linha2 || "",
-    complemento: compl || "",
-    cep: e?.cep || "",
-    ll: e?.ll || "",
+    complemento: (e?.complemento || "").toString(),
+    cep: (e?.cep || "").toString(),
+    ll: (e?.ll || "").toString(),
   };
+}
+
+function firstPhones(c?: ClienteObj | null) {
+  const t = (c?.telefones || []).filter(Boolean);
+  return [t[0], t[1]].filter(Boolean).join(" / ");
 }
 
 export default function Page() {
@@ -160,7 +161,7 @@ export default function Page() {
   const [q, setQ] = useState(initial?.q ?? "");
 
   const [clienteFlag, setClienteFlag] = useState(initial?.cliente ?? "1");
-  const [maxClientes, setMaxClientes] = useState(initial?.max_clientes ?? "20");
+  const [maxClientes, setMaxClientes] = useState(initial?.max_clientes ?? "300");
 
   const [group, setGroup] = useState<"dia" | "viatura">(initial?.group ?? "dia");
 
@@ -240,7 +241,8 @@ export default function Page() {
         if (!qq) return true;
 
         const c = it.cliente;
-        const e = enderecoFormatado(c);
+        const e = formatEndereco(c);
+
         const blob = [
           it._dia,
           it._viatura,
@@ -249,10 +251,12 @@ export default function Page() {
           it.status,
           it.motivo,
           it.usuario,
+          it.responsavel,
           c?.nome,
           (c?.telefones || []).join(" "),
           c?.email,
           c?.plano,
+          c?.observacao,
           e.linha1,
           e.linha2,
           e.complemento,
@@ -353,10 +357,10 @@ export default function Page() {
           </div>
 
           <div className="field">
-            <label>Cliente</label>
+            <label>Dados do cliente</label>
             <select value={clienteFlag} onChange={(e) => setClienteFlag(e.target.value)}>
-              <option value="1">Enriquecer (Sim)</option>
-              <option value="0">Somente O.S (Não)</option>
+              <option value="1">Buscar (mais pesado)</option>
+              <option value="0">Não buscar (mais leve)</option>
             </select>
           </div>
 
@@ -375,11 +379,7 @@ export default function Page() {
 
           <div className="field grow">
             <label>Busca</label>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Cliente, contrato, endereço, plano..."
-            />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cliente, endereço, contrato, plano..." />
           </div>
         </section>
 
@@ -424,104 +424,84 @@ export default function Page() {
                   {list.map((it) => {
                     const c = it.cliente;
                     const e = c?.endereco;
-                    const end = enderecoFormatado(c);
-
-                    const tel1 = (c?.telefones && c.telefones[0]) || "";
-                    const tel2 = (c?.telefones && c.telefones[1]) || "";
+                    const end = formatEndereco(c);
 
                     return (
                       <article
                         key={`${it.tipo}-${it.id}-${it._viatura}-${it._dia}`}
-                        className={cx("card", `tone-${statusTone(it.status)}`)}
+                        className={cx("card2", `tone-${statusTone(it.status)}`)}
                       >
-                        <div className="cardHeader">
-                          <div className="cardTime">{fmtHour(it.hora)}</div>
-                          <div className="cardBadges">
-                            <span className="badge">{it._viatura}</span>
-                            <span className="badge ghost">{it.status || "—"}</span>
-                            <span className="badge ghost">Contrato {it.contrato || "—"}</span>
+                        <div className="card2Top">
+                          <div className="card2Time">{fmtHour(it.hora)}</div>
+                          <div className="card2Badges">
+                            <span className="pill">{it._viatura}</span>
+                            <span className="pill ghost">OS {it.id}</span>
+                            <span className="pill ghost">{it.status || "—"}</span>
                           </div>
                         </div>
 
-                        <div className="cardMainTitle">
-                          {it.motivo || "—"} <span className="muted">•</span> OS {it.id}
+                        <div className="card2Title">
+                          {it.motivo || "—"} <span className="muted">•</span> Contrato {it.contrato || "—"}
                         </div>
 
-                        <div className="cardGrid2">
-                          <div className="cardSection">
-                            <div className="sectionTitle">Cliente</div>
+                        <div className="card2Body">
+                          <div className="card2Block">
+                            <div className="card2BlockTitle">Cliente</div>
 
-                            <div className="row">
+                            <div className="kv">
                               <span className="k">Nome</span>
-                              <span className="vWrap">{c?.nome || "—"}</span>
+                              <span className="v">{c?.nome || "—"}</span>
                             </div>
 
-                            <div className="row">
+                            <div className="kv">
                               <span className="k">Contato</span>
-                              <span className="vWrap">
-                                {[tel1, tel2].filter(Boolean).join(" / ") || "—"}
-                              </span>
+                              <span className="v">{firstPhones(c) || "—"}</span>
                             </div>
 
-                            <div className="row">
-                              <span className="k">Email</span>
-                              <span className="vWrap">{c?.email || "—"}</span>
-                            </div>
-
-                            <div className="row">
+                            <div className="kv">
                               <span className="k">Plano</span>
-                              <span className="vWrap">{c?.plano || "—"}</span>
+                              <span className="v">{c?.plano || "—"}</span>
                             </div>
 
-                            <div className="row">
+                            <div className="kv">
                               <span className="k">Endereço</span>
-                              <span className="vWrap">
-                                {([end.linha1, end.linha2, end.complemento].filter(Boolean).join("\n") || "—") as any}
+                              <span className="v">
+                                {[end.linha1, end.linha2, end.complemento].filter(Boolean).join(" • ") || "—"}
                               </span>
                             </div>
 
-                            <div className="row">
+                            <div className="kv">
                               <span className="k">CEP</span>
                               <span className="v">{e?.cep || "—"}</span>
                             </div>
-
-                            <div className="row">
-                              <span className="k">LL</span>
-                              <span className="vWrap">{e?.ll || "—"}</span>
-                            </div>
                           </div>
 
-                          <div className="cardSection">
-                            <div className="sectionTitle">Serviço</div>
+                          <div className="card2Block">
+                            <div className="card2BlockTitle">Serviço</div>
 
-                            <div className="row">
-                              <span className="k">Status</span>
-                              <span className="v">{it.status || "—"}</span>
-                            </div>
-
-                            <div className="row">
+                            <div className="kv">
                               <span className="k">Usuário</span>
                               <span className="v">{it.usuario || "—"}</span>
                             </div>
 
-                            <div className="row">
+                            <div className="kv">
                               <span className="k">Equipe</span>
                               <span className="v">{it.responsavel || "—"}</span>
                             </div>
 
-                            <div className="row">
+                            <div className="kv">
                               <span className="k">Contrato</span>
                               <span className="v">{it.contrato || "—"}</span>
                             </div>
 
-                            <div className="row">
-                              <span className="k">Contrato status</span>
-                              <span className="vWrap">{it.contrato_status || "—"}</span>
+                            <div className="kv">
+                              <span className="k">Status contrato</span>
+                              <span className="v">{it.contrato_status || "—"}</span>
                             </div>
 
-                            <div className="row">
-                              <span className="k">Obs. cliente</span>
-                              <span className="vWrap">{c?.observacao || "—"}</span>
+                            <div className="kv">
+                              <span className="k">LL</span>
+                              <span className="v">{e?.ll || "—"}</span>
                             </div>
                           </div>
                         </div>
