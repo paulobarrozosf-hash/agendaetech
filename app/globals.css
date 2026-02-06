@@ -1,26 +1,100 @@
-@import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+:root{
+  --bg:#0B0D10; --panel:#13161B; --inner:#1B1F23;
+  --text:#E6EEF8; --sub:#9CA3AF; --yellow:#F2C811; --border:#2B323B;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+body{
+  margin:0;
+  font-family: Segoe UI, Arial, system-ui;
+  background:var(--bg);
+  color:var(--text);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.hdr{
+  padding:14px 16px;
+  background:var(--panel);
+  border-bottom:1px solid var(--border);
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.title{ font-weight:700; color:var(--yellow); }
+
+.controls{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+
+input, select{
+  background:var(--inner);
+  color:var(--text);
+  border:1px solid var(--border);
+  padding:8px 10px;
+  border-radius:8px;
 }
+
+button{
+  background:var(--yellow);
+  color:#111217;
+  border:0;
+  padding:9px 12px;
+  border-radius:8px;
+  font-weight:700;
+  cursor:pointer;
+}
+
+button:disabled{ opacity:.6; cursor:not-allowed; }
+
+.wrap{ padding:16px; }
+
+.error{
+  background:#3a0d0d;
+  border:1px solid #7f1d1d;
+  color:#fecaca;
+  padding:10px 12px;
+  border-radius:10px;
+  margin-bottom:12px;
+}
+
+.metaLine{ color:var(--sub); margin-bottom:12px; }
+
+.grid{
+  display:grid;
+  grid-template-columns: repeat(7, minmax(240px, 1fr));
+  gap:12px;
+}
+
+@media (max-width: 1200px){
+  .grid{ grid-template-columns: repeat(2, minmax(240px, 1fr)); }
+}
+@media (max-width: 700px){
+  .grid{ grid-template-columns: 1fr; }
+}
+
+.day{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:14px;
+  overflow:hidden;
+}
+
+.day h3{
+  margin:0;
+  padding:10px 12px;
+  background:var(--inner);
+  border-bottom:1px solid var(--border);
+  font-size:14px;
+  color:var(--yellow);
+}
+
+.card{
+  margin:10px;
+  padding:10px;
+  background:var(--inner);
+  border:1px solid var(--border);
+  border-left:6px solid #94A3B8;
+  border-radius:12px;
+}
+
+.meta{ color:var(--sub); font-size:12px; }
+.row{ display:flex; justify-content:space-between; gap:8px; }
+.strong{ font-weight:700; }
