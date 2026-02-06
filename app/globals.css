@@ -534,5 +534,8 @@ input:focus, select:focus, textarea:focus{
 }
 .reservaItemActions{ display:flex; gap: 8px; }
 
-/* Footer */
-.footer { display: none !important; }
+.footer{
+  padding: 12px 0 20px;
+  color: rgba(234,242,255,.65);
+  text-align: center;
+}
