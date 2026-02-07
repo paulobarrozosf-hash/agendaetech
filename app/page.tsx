@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image"; // Importe o componente Image
 import { useEffect, useMemo, useState } from "react";
 
 // --- Tipos de dados (para o SGP e para o local) ---
@@ -433,7 +434,7 @@ export default function HomePage() {
 
   const [viatura, setViatura] = useState("");
   const [maxClientes, setMaxClientes] = useState("200");
-  const [q, setQ] = useState("");
+  const [qAgenda, setQAgenda] = useState(""); // Campo de busca para a agenda
 
   const [selectedAgendaItem, setSelectedAgendaItem] = useState<FlatItem | null>(null); // Para modal da agenda
 
@@ -468,6 +469,7 @@ export default function HomePage() {
   const [iPlanoCodigo, setIPlanoCodigo] = useState(PLANOS[0].codigo);
   const [iPlanoOptionId, setIPlanoOptionId] = useState(PLANOS[0].options[0].id);
   const [iAppsSelecionados, setIAppsSelecionados] = useState<string[]>([]);
+  const [qInstallations, setQInstallations] = useState(""); // Campo de busca para instalações
 
   const [selectedInstallation, setSelectedInstallation] = useState<InstallationData | null>(null); // Para modal da instalação
 
@@ -615,17 +617,26 @@ export default function HomePage() {
         category: choice.category,
         apps: iAppsSelecionados.filter(app => choice.options.includes(app))
       })),
-      criadoPor: "Usuário Local", // Pode ser dinâmico
+      criadoPor: null, // Pode adicionar um campo para isso no futuro
       notasInternas: null,
+      reservaId: null, // Pode linkar com reserva no futuro
     };
     setLocalInstallations((prev) => [...prev, newInstallation]);
     alert("Ficha de instalação salva no navegador!");
     // Limpar formulário
-    setINome(""); setICpf(""); setINasc("");
-    setIContato1(""); setIContato2(""); setIEmail("");
-    setIEndereco(""); setIRef("");
-    setIVenc(10); setIFatura("WHATSAPP_EMAIL"); setITaxa("PIX");
-    setIWifiNome(""); setIWifiSenha("");
+    setINome("");
+    setICpf("");
+    setINasc("");
+    setIContato1("");
+    setIContato2("");
+    setIEmail("");
+    setIEndereco("");
+    setIRef("");
+    setIVenc(10);
+    setIFatura("WHATSAPP_EMAIL");
+    setITaxa("PIX");
+    setIWifiNome("");
+    setIWifiSenha("");
     setIPlanoCodigo(PLANOS[0].codigo);
     setIPlanoOptionId(PLANOS[0].options[0].id);
     setIAppsSelecionados([]);
@@ -637,8 +648,8 @@ export default function HomePage() {
     }
   };
 
-  // --- Lógica de carregamento da Agenda ---
-  const loadAgenda = async () => {
+  // --- Carregar dados da Agenda ---
+  const loadData = async () => {
     setLoading(true);
     setErr(null);
     try {
@@ -651,7 +662,52 @@ export default function HomePage() {
       const t = await r.text();
       if (!r.ok) throw new Error(t);
       const j: AgendaResp = JSON.parse(t);
-      setData(j);
+
+      // Mesclar reservas locais
+      const allItems: FlatItem[] = [];
+      (j.dias || []).forEach((dia) => {
+        Object.entries(dia.porViatura).forEach(([viatura, items]) => {
+          items.forEach((item) => {
+            allItems.push({ ...item, _dia: dia.data, _viatura: viatura });
+          });
+        });
+      });
+
+      // Adicionar reservas locais que caem no período
+      localReserves.forEach((reserva) => {
+        if (reserva.data && reserva.data >= inicio && reserva.data <= fim) {
+          allItems.push({
+            ...reserva,
+            _dia: reserva.data,
+            _viatura: reserva.responsavel || "N/A",
+          } as FlatItem);
+        }
+      });
+
+      // Reagrupar para o formato da agenda
+      const newDiasMap = new Map<string, Dia>();
+      allItems.sort((a, b) => {
+        const dateA = `${a._dia} ${a.hora}`;
+        const dateB = `${b._dia} ${b.hora}`;
+        return dateA.localeCompare(dateB);
+      });
+
+      allItems.forEach((item) => {
+        if (!newDiasMap.has(item._dia)) {
+          newDiasMap.set(item._dia, { data: item._dia, porViatura: {} });
+        }
+        const diaObj = newDiasMap.get(item._dia)!;
+        if (!diaObj.porViatura[item._viatura]) {
+          diaObj.porViatura[item._viatura] = [];
+        }
+        diaObj.porViatura[item._viatura].push(item);
+      });
+
+      const sortedDias = Array.from(newDiasMap.values()).sort((a, b) =>
+        a.data.localeCompare(b.data)
+      );
+
+      setData({ ...j, dias: sortedDias });
       setLastUpdated(new Date().toLocaleString("pt-BR"));
     } catch (e: any) {
       setErr(e?.message || "Erro ao carregar agenda.");
@@ -661,83 +717,110 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    loadAgenda();
+    loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inicio, fim, maxClientes]); // Recarrega quando início, fim ou maxClientes mudam
+  }, [inicio, dias, maxClientes, localReserves]); // Recarrega se mudar período ou reservas locais
 
-  // --- Processamento e filtragem dos itens da agenda ---
+  // --- Lógica de filtragem da Agenda ---
   const flatItemsAll = useMemo(() => {
     const items: FlatItem[] = [];
-    // Adiciona itens do SGP
-    data?.dias?.forEach((dia) => {
+    data?.dias.forEach((dia) => {
       Object.entries(dia.porViatura).forEach(([viaturaKey, viaturaItems]) => {
         viaturaItems.forEach((item) => {
           items.push({ ...item, _dia: dia.data, _viatura: viaturaKey });
         });
       });
     });
-    // Adiciona reservas locais
-    localReserves.forEach((reserve) => {
-      items.push({
-        ...reserve,
-        _dia: reserve.data || hojeISO(),
-        _viatura: reserve.responsavel || "N/A",
-      });
-    });
-    return items.sort((a, b) => {
-      const timeA = `${a._dia} ${a.hora}`;
-      const timeB = `${b._dia} ${b.hora}`;
-      return timeA.localeCompare(timeB);
-    });
-  }, [data, localReserves]);
+    return items;
+  }, [data]);
 
-  const filtered = useMemo(() => {
-    let currentItems = flatItemsAll;
+  const filteredAgendaItems = useMemo(() => {
+    let items = flatItemsAll;
 
     // Filtro por viatura
-    if (viatura) {
-      currentItems = currentItems.filter((it) => it._viatura === viatura);
+    if (viatura && viatura !== "Todas") {
+      items = items.filter((item) => item._viatura === viatura);
     }
 
-    // Filtro por busca (q)
-    if (q) {
-      const lowerQ = q.toLowerCase();
-      currentItems = currentItems.filter((it) => {
-        const searchString = [
-          it.cliente?.nome,
-          it.contrato,
-          it.cliente?.endereco?.logradouro,
-          it.motivo,
-          phonesLinha(it.cliente),
-          it.cliente?.plano,
-        ].filter(Boolean).join(" ").toLowerCase();
-        return searchString.includes(lowerQ);
+    // Filtro por busca (cliente, contrato, endereço, plano)
+    if (qAgenda) {
+      const query = qAgenda.toLowerCase();
+      items = items.filter((item) => {
+        const clienteNome = item.cliente?.nome?.toLowerCase() || "";
+        const contrato = item.contrato?.toLowerCase() || "";
+        const endereco = clienteEnderecoLinha(item.cliente)?.toLowerCase() || "";
+        const plano = item.cliente?.plano?.toLowerCase() || "";
+        const motivo = item.motivo?.toLowerCase() || "";
+
+        return (
+          clienteNome.includes(query) ||
+          contrato.includes(query) ||
+          endereco.includes(query) ||
+          plano.includes(query) ||
+          motivo.includes(query)
+        );
       });
     }
-    return currentItems;
-  }, [flatItemsAll, viatura, q]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, FlatItem[]>();
-    filtered.forEach((item) => {
-      const dia = item._dia;
-      if (!map.has(dia)) {
-        map.set(dia, []);
+    // Reagrupar por dia e viatura para exibição
+    const groupedByDayAndViatura = new Map<string, Map<string, FlatItem[]>>();
+    items.forEach((item) => {
+      if (!groupedByDayAndViatura.has(item._dia)) {
+        groupedByDayAndViatura.set(item._dia, new Map<string, FlatItem[]>());
       }
-      map.get(dia)?.push(item);
+      const viaturaMap = groupedByDayAndViatura.get(item._dia)!;
+      if (!viaturaMap.has(item._viatura)) {
+        viaturaMap.set(item._viatura, []);
+      }
+      viaturaMap.get(item._viatura)!.push(item);
     });
-    return Array.from(map.entries()).sort(([diaA], [diaB]) => diaA.localeCompare(diaB));
-  }, [filtered]);
+
+    const finalGrouped: [string, [string, FlatItem[]][]][] = Array.from(
+      groupedByDayAndViatura.entries()
+    )
+      .sort(([diaA], [diaB]) => diaA.localeCompare(diaB))
+      .map(([dia, viaturaMap]) => [
+        dia,
+        Array.from(viaturaMap.entries()).sort(([vA], [vB]) => vA.localeCompare(vB)),
+      ]);
+
+    return finalGrouped;
+  }, [flatItemsAll, viatura, qAgenda]);
+
+  // --- Lógica de filtragem da lista de Instalações ---
+  const filteredInstallations = useMemo(() => {
+    if (!qInstallations) return localInstallations;
+    const query = qInstallations.toLowerCase();
+    return localInstallations.filter(inst => {
+      const nome = inst.nomeCompleto.toLowerCase();
+      const cpf = inst.cpf.toLowerCase();
+      const contato1 = inst.contato1.toLowerCase();
+      const endereco = inst.enderecoFull.toLowerCase();
+      const plano = inst.planoNome.toLowerCase();
+      const apps = inst.appsEscolhidos.map(c => c.apps.join(" ").toLowerCase()).join(" ");
+
+      return nome.includes(query) ||
+             cpf.includes(query) ||
+             contato1.includes(query) ||
+             endereco.includes(query) ||
+             plano.includes(query) ||
+             apps.includes(query);
+    });
+  }, [localInstallations, qInstallations]);
+
 
   return (
     <>
       <header className="topbar">
         <div className="container topbarInner">
           <div className="brand">
-            <div className="brandLogo">E</div>
+            <div className="brandLogo">
+              {/* Substitua o "E" pela sua logo. Coloque sua logo em public/logo.png */}
+              <Image src="/logo.png" alt="Logo Etech" width={44} height={44} />
+            </div>
             <div>
-              <div className="brandTitle">Agenda Operacional</div>
-              <div className="brandSub">Etech • SGP</div>
+              <div className="brandTitle">Agenda Operacional Etech - SGP</div>
+              <div className="brandSub">Gerenciamento de Serviços e Instalações</div>
             </div>
           </div>
 
@@ -746,19 +829,19 @@ export default function HomePage() {
               Agenda
             </button>
             <button className={cx("tab", tab === "reservar" && "tabActive")} onClick={() => setTab("reservar")}>
-              Reservar serviço
+              Reservar Serviço
             </button>
             <button className={cx("tab", tab === "instalacao" && "tabActive")} onClick={() => setTab("instalacao")}>
-              Nova instalação
+              Nova Instalação
             </button>
           </nav>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <span className="chip">Período</span>
-            <span className="chip">{inicio} → {fim}</span>
-            <button className="btn primary" onClick={loadAgenda} disabled={loading}>
-              {loading ? "Carregando..." : "Atualizar"}
-            </button>
+          <div style={{ display: "flex", gap: 10 }}>
+            {tab === "agenda" && (
+              <button className="btn primary" onClick={loadData} disabled={loading}>
+                {loading ? "Atualizando..." : "Atualizar Agenda"}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -772,119 +855,118 @@ export default function HomePage() {
                 <label>Início</label>
                 <input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} />
               </div>
-
               <div className="field">
                 <label>Dias</label>
                 <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
-                  {[1, 3, 5, 7, 10, 14].map((n) => (
-                    <option key={n} value={n}>{n}</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 14, 21, 30].map((d) => (
+                    <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
               </div>
-
               <div className="field">
                 <label>Viatura</label>
                 <select value={viatura} onChange={(e) => setViatura(e.target.value)}>
                   <option value="">Todas</option>
-                  {(data?.viaturas || ["VT01", "VT02", "VT03", "VT04", "VT05"]).map((v) => (
+                  {data?.viaturas.map((v) => (
                     <option key={v} value={v}>{v}</option>
                   ))}
+                  {/* Adicionar viaturas de reservas locais se não estiverem na lista do SGP */}
+                  {Array.from(new Set(localReserves.map(r => r.responsavel).filter(Boolean)))
+                    .filter(v => !data?.viaturas.includes(v!))
+                    .map(v => (
+                      <option key={v} value={v}>{v} (Local)</option>
+                    ))}
                 </select>
               </div>
-
               <div className="field">
-                <label>Max clientes</label>
-                <input value={maxClientes} onChange={(e) => setMaxClientes(e.target.value)} />
+                <label>Max Clientes</label>
+                <input type="number" value={maxClientes} onChange={(e) => setMaxClientes(e.target.value)} />
               </div>
-
-              <div className="field grow">
-                <label>Busca</label>
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="cliente, contrato, endereço, motivo..." />
+              <div className="field grow search-field">
+                <label>Busca (cliente, contrato, endereço, plano, motivo)</label>
+                <input type="text" value={qAgenda} onChange={(e) => setQAgenda(e.target.value)} placeholder="Buscar na agenda..." />
               </div>
-
               <div className="field">
-                <label>Atualização</label>
-                <div className="chip">{lastUpdated}</div>
-              </div>
-
-              <div className="field">
-                <label>Reservas locais</label>
-                <div className="chip">{localReserves.length}</div>
+                <label>&nbsp;</label>
+                <button className="btn" onClick={loadData} disabled={loading}>Aplicar Filtros</button>
               </div>
             </section>
 
             {err ? (
-              <section
-                className="panel"
-                style={{
-                  marginTop: 12,
-                  padding: 12,
-                  borderColor: "rgba(239,68,68,.35)",
-                  background: "rgba(58,13,13,.40)",
-                }}
-              >
+              <section className="panel" style={{ marginTop: 12, padding: 12, borderColor: "rgba(239,68,68,.35)", background: "rgba(58,13,13,.40)" }}>
                 <div style={{ fontWeight: 950 }}>Erro</div>
                 <div style={{ marginTop: 6, color: "rgba(254,202,202,.95)" }}>{err}</div>
               </section>
             ) : null}
 
             <main className="content">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div className="chip">
+                  Período: {inicio} até {fim}
+                </div>
+                {lastUpdated && <div className="chip small">Atualizado em: {lastUpdated}</div>}
+              </div>
+
               <div className="grid">
-                {grouped.map(([dia, itens]) => (
+                {filteredAgendaItems.map(([dia, viaturasDoDia]) => (
                   <section className="col" key={dia}>
                     <div className="colHead">
                       <div className="colTitle">{dia}</div>
-                      <span className="chip small">{itens.length} itens</span>
+                      <span className="chip small">{viaturasDoDia.reduce((acc, [, items]) => acc + items.length, 0)} itens</span>
                     </div>
 
                     <div className="cards">
-                      {itens.map((it) => {
-                        const c = it.cliente;
-                        const endereco = clienteEnderecoLinha(c);
+                      {viaturasDoDia.map(([viaturaKey, itensDaViatura]) => (
+                        <div key={viaturaKey}>
+                          {itensDaViatura.map((it) => {
+                            const c = it.cliente;
+                            const endereco = clienteEnderecoLinha(c);
 
-                        return (
-                          <article
-                            key={`${it.id}-${it._dia}-${it._viatura}`}
-                            className={cx("cardCompact", `tone-${statusTone(it.status, it.tipo)}`)}
-                            onClick={() => setSelectedAgendaItem(it)}
-                            role="button"
-                            tabIndex={0}
-                          >
-                            <div className="cardCompactTop">
-                              <div className="cardCompactTime">{fmtHour(it.hora)}</div>
-                              <div className="cardCompactBadges">
-                                <span className="pill">{it._viatura}</span>
-                                <span className="pill ghost">
-                                  {it.tipo === "reserva_local" ? "RESERVA (LOCAL)" : `OS ${it.id}`}
-                                </span>
-                                <span className="pill ghost">{safeText(it.status)}</span>
-                              </div>
-                            </div>
+                            return (
+                              <article
+                                key={`${it.id}-${it._dia}-${it._viatura}`}
+                                className={cx("cardCompact", `tone-${statusTone(it.status, it.tipo)}`)}
+                                onClick={() => setSelectedAgendaItem(it)}
+                                role="button"
+                                tabIndex={0}
+                              >
+                                <div className="cardCompactTop">
+                                  <div className="cardCompactTime">{fmtHour(it.hora)}</div>
+                                  <div className="cardCompactBadges">
+                                    <span className="pill">{it._viatura}</span>
+                                    <span className="pill ghost">
+                                      {it.tipo === "reserva_local" ? "RESERVA (LOCAL)" : `OS ${it.id}`}
+                                    </span>
+                                    <span className="pill ghost">{safeText(it.status)}</span>
+                                  </div>
+                                </div>
 
-                            <div className="titleMainClamp">{safeText(c?.nome)}</div>
-                            <div className="titleSub">{safeText(it.motivo)}</div>
+                                <div className="titleMainClamp">{safeText(c?.nome)}</div>
+                                <div className="titleSub">{safeText(it.motivo)}</div>
 
-                            <div className="cardCompactBody">
-                              <div className="kvRow">
-                                <span className="k">Contrato</span>
-                                <span className="v">{safeText(it.contrato)}</span>
-                              </div>
-                              <div className="kvRow">
-                                <span className="k">Endereço</span>
-                                <span className="v vClamp2">{safeText(endereco)}</span>
-                              </div>
-                              <div className="kvRow">
-                                <span className="k">Usuário</span>
-                                <span className="v">{safeText(it.usuario)}</span>
-                              </div>
-                              <div className="kvRow">
-                                <span className="k">Resp.</span>
-                                <span className="v">{safeText(it.responsavel)}</span>
-                              </div>
-                            </div>
-                          </article>
-                        );
-                      })}
+                                <div className="cardCompactBody">
+                                  <div className="kvRow">
+                                    <span className="k">Contrato</span>
+                                    <span className="v">{safeText(it.contrato)}</span>
+                                  </div>
+                                  <div className="kvRow">
+                                    <span className="k">Endereço</span>
+                                    <span className="v vClamp2">{safeText(endereco)}</span>
+                                  </div>
+                                  <div className="kvRow">
+                                    <span className="k">Usuário</span>
+                                    <span className="v">{safeText(it.usuario)}</span>
+                                  </div>
+                                  <div className="kvRow">
+                                    <span className="k">Resp.</span>
+                                    <span className="v">{safeText(it.responsavel)}</span>
+                                  </div>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      ))}
                     </div>
                   </section>
                 ))}
@@ -1132,12 +1214,18 @@ export default function HomePage() {
 
             <div className="hr" />
 
-            <div style={{ fontWeight: 950, marginBottom: 10 }}>Fichas de Instalação salvas (neste navegador)</div>
-            {localInstallations.length === 0 ? (
-              <div className="chip">Nenhuma ficha de instalação salva.</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "10px" }}>
+              <div style={{ fontWeight: 950 }}>Fichas de Instalação salvas (neste navegador)</div>
+              <div className="field grow search-field" style={{ margin: 0 }}>
+                <input type="text" value={qInstallations} onChange={(e) => setQInstallations(e.target.value)} placeholder="Buscar instalações salvas..." />
+              </div>
+            </div>
+
+            {filteredInstallations.length === 0 ? (
+              <div className="chip">Nenhuma ficha de instalação salva ou encontrada com a busca.</div>
             ) : (
               <div className="installationsList">
-                {localInstallations.map((inst) => (
+                {filteredInstallations.map((inst) => (
                   <div key={inst.id} className="installationItem">
                     <div className="name">{inst.nomeCompleto}</div>
                     <div className="contact">{inst.contato1} {inst.email ? `• ${inst.email}` : ''}</div>
