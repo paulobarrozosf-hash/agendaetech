@@ -330,3 +330,31 @@ input:focus, select:focus, textarea:focus{
 }
 
 .footer{ padding: 12px 0 20px; text-align: center; color: rgba(234,242,255,.65); }
+
+/* Estilos para a lista de instalações */
+.installationsList{
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.installationItem{
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148,163,184,.16);
+  background: rgba(6,10,18,.30);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr; /* Nome, Contato, Plano */
+  gap: 10px;
+  align-items: center;
+}
+.installationItem .name{ font-weight: 950; }
+.installationItem .contact{ font-size: 12px; color: var(--muted); }
+.installationItem .plan{ font-size: 12px; text-align: right; }
+@media (max-width: 640px) {
+  .installationItem {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+  .installationItem .plan { text-align: left; }
+}
