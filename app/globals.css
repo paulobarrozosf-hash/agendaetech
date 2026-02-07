@@ -358,3 +358,21 @@ input:focus, select:focus, textarea:focus{
   }
   .installationItem .plan { text-align: left; }
 }
+
+/* Estilos para os grupos de apps */
+.appGroup {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148,163,184,.1);
+  background: rgba(6,10,18,.2);
+}
+.appGroupTitle {
+  font-weight: 900;
+  font-size: 11px;
+  color: rgba(124,196,255,.8);
+  margin-bottom: 8px;
+}
+.appGroup .chip {
+  margin-bottom: 5px; /* Espaçamento entre os chips */
+}
