@@ -76,98 +76,300 @@ type InstallationData = {
   planoNome: string;
   planoMbps?: number | null;
   planoValor?: number | null;
-  appsEscolhidos?: string[]; // Lista de apps
+  appsEscolhidos: { category: string; apps: string[] }[]; // Lista de apps estruturada
   criadoPor?: string | null;
   notasInternas?: string | null;
   reservaId?: string | null; // Link para a reserva local
 };
 
-// --- Dados dos Planos (para o formulário) ---
-const PLANOS = [
+// --- Estrutura para os planos e suas opções de apps ---
+type AppCategory = "STANDARD" | "ADVANCED" | "TOP" | "PREMIUM";
+
+type PlanAppChoice = {
+  category: AppCategory;
+  count: number; // Quantos apps podem ser escolhidos desta categoria
+  options: string[]; // Lista de apps disponíveis nesta categoria
+};
+
+type PlanOption = {
+  id: string; // Ex: "A", "B", "UNICA"
+  name: string; // Ex: "Opção A", "Formato Único"
+  choices: PlanAppChoice[];
+};
+
+type Plan = {
+  codigo: string;
+  nome: string;
+  mbps: number;
+  valor: number; // em centavos
+  options: PlanOption[];
+};
+
+// --- Dados dos Planos (detalhado conforme sua especificação) ---
+const PLANOS: Plan[] = [
   {
     codigo: "ESSENCIAL_100",
     nome: "Plano Essencial 100",
     mbps: 100,
     valor: 8499,
-    apps: ["Leitura360", "Cindie"],
+    options: [{
+      id: "UNICA",
+      name: "Combo Standard (1 App)",
+      choices: [{
+        category: "STANDARD",
+        count: 1,
+        options: [
+          "Ubook+", "Estuda+", "Pequenos Leitores", "Looke", "Sky+ Light SVA",
+          "PlayKids+", "Kaspersky Standard (1 licença)", "Hub Vantagens",
+          "Revistaria", "Fluid", "Social Comics", "QNutri", "Playlist", "Kiddle Pass"
+        ]
+      }]
+    }]
   },
   {
     codigo: "MINI_PLUS_300",
     nome: "Plano Mini Plus 300",
     mbps: 300,
     valor: 10999,
-    apps: ["Leitura360", "Cindie", "Estádio TNT Sports"],
+    options: [{
+      id: "UNICA",
+      name: "Advanced (1 App)",
+      choices: [{
+        category: "ADVANCED",
+        count: 1,
+        options: [
+          "Deezer", "DocWay", "Sky+ Light com Globo SVA",
+          "Kaspersky Standard (3 licenças)", "O Jornalista", "CurtaOn",
+          "HotGo", "Kiddle Pass"
+        ]
+      }]
+    }]
   },
   {
-    codigo: "PLUS_300_OPCAO_A",
-    nome: "Plano Plus 300 • Opção A",
+    codigo: "PLUS_300",
+    nome: "Plano Plus 300",
     mbps: 300,
     valor: 11999,
-    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "Deezer Premium"],
+    options: [
+      {
+        id: "A",
+        name: "Opção A: Top (1 App)",
+        choices: [{
+          category: "TOP",
+          count: 1,
+          options: [
+            "HBO Max (com anúncios)", "Sky+ Light com Globo e Amazon SVA",
+            "Leitura360", "Cindie"
+          ]
+        }]
+      },
+      {
+        id: "B",
+        name: "Opção B: Standard (1 App) + Advanced (1 App)",
+        choices: [
+          {
+            category: "STANDARD",
+            count: 1,
+            options: [
+              "Ubook+", "Estuda+", "Pequenos Leitores", "Looke", "Sky+ Light SVA",
+              "PlayKids+", "Kaspersky Standard (1 licença)", "Hub Vantagens",
+              "Revistaria", "Fluid", "Social Comics", "QNutri", "Playlist", "Kiddle Pass"
+            ]
+          },
+          {
+            category: "ADVANCED",
+            count: 1,
+            options: [
+              "Deezer", "DocWay", "Sky+ Light com Globo SVA",
+              "Kaspersky Standard (3 licenças)", "O Jornalista", "CurtaOn",
+              "HotGo", "Kiddle Pass"
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
-    codigo: "PLUS_300_OPCAO_B",
-    nome: "Plano Plus 300 • Opção B",
-    mbps: 300,
-    valor: 11999,
-    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (com anúncios)"],
-  },
-  {
-    codigo: "ULTRA_500_A",
-    nome: "Plano Ultra 500 • Opção A",
+    codigo: "ULTRA_500",
+    nome: "Plano Ultra 500",
     mbps: 500,
     valor: 14999,
-    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "Deezer Premium", "HBO Max (com anúncios)"],
-  },
-  {
-    codigo: "ULTRA_500_B",
-    nome: "Plano Ultra 500 • Opção B",
-    mbps: 500,
-    valor: 14999,
-    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (com anúncios)", "Sky+ Light com Globo e Amazon SVA"],
-  },
-  {
-    codigo: "ULTRA_500_C",
-    nome: "Plano Ultra 500 • Opção C",
-    mbps: 500,
-    valor: 14999,
-    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (com anúncios)", "Kaspersky Plus (1 licença)"],
+    options: [
+      {
+        id: "A",
+        name: "Opção A: Top (1 App) + Standard (1 App)",
+        choices: [
+          {
+            category: "TOP",
+            count: 1,
+            options: [
+              "HBO Max (com anúncios)", "Sky+ Light com Globo e Amazon SVA",
+              "Leitura360", "Cindie"
+            ]
+          },
+          {
+            category: "STANDARD",
+            count: 1,
+            options: [
+              "Ubook+", "Estuda+", "Pequenos Leitores", "Looke", "Sky+ Light SVA",
+              "PlayKids+", "Kaspersky Standard (1 licença)", "Hub Vantagens",
+              "Revistaria", "Fluid", "Social Comics", "QNutri", "Playlist", "Kiddle Pass"
+            ]
+          }
+        ]
+      },
+      {
+        id: "B",
+        name: "Opção B: Advanced (1 App) + Standard (2 Apps)",
+        choices: [
+          {
+            category: "ADVANCED",
+            count: 1,
+            options: [
+              "Deezer", "DocWay", "Sky+ Light com Globo SVA",
+              "Kaspersky Standard (3 licenças)", "O Jornalista", "CurtaOn",
+              "HotGo", "Kiddle Pass"
+            ]
+          },
+          {
+            category: "STANDARD",
+            count: 2,
+            options: [
+              "Ubook+", "Estuda+", "Pequenos Leitores", "Looke", "Sky+ Light SVA",
+              "PlayKids+", "Kaspersky Standard (1 licença)", "Hub Vantagens",
+              "Revistaria", "Fluid", "Social Comics", "QNutri", "Playlist", "Kiddle Pass"
+            ]
+          }
+        ]
+      },
+      {
+        id: "C",
+        name: "Opção C: Advanced (2 Apps)",
+        choices: [{
+          category: "ADVANCED",
+          count: 2,
+          options: [
+            "Deezer", "DocWay", "Sky+ Light com Globo SVA",
+            "Kaspersky Standard (3 licenças)", "O Jornalista", "CurtaOn",
+            "HotGo", "Kiddle Pass"
+          ]
+        }]
+      }
+    ]
   },
   {
     codigo: "PREMIUM_ULTRA_500",
     nome: "Plano Premium Ultra 500",
     mbps: 500,
     valor: 15999,
-    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (sem anúncios)", "Kaspersky Plus (3 licenças)"],
+    options: [{
+      id: "UNICA",
+      name: "Premium (1 App)",
+      choices: [{
+        category: "PREMIUM",
+        count: 1,
+        options: [
+          "HBO Max (sem anúncios)", "Kaspersky Plus (5 licenças)",
+          "ZenWellness", "Queima Diária", "Smart Content"
+        ]
+      }]
+    }]
   },
   {
-    codigo: "MAX_700_A",
-    nome: "Plano Max 700 • Opção A",
+    codigo: "MAX_700",
+    nome: "Plano Max 700",
     mbps: 700,
     valor: 17999,
-    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (sem anúncios)", "Kaspersky Plus (5 licenças)", "Sky+ Light com Globo e Amazon SVA"],
+    options: [
+      {
+        id: "A",
+        name: "Opção A: Premium (1 App)",
+        choices: [{
+          category: "PREMIUM",
+          count: 1,
+          options: [
+            "HBO Max (sem anúncios)", "Kaspersky Plus (5 licenças)",
+            "ZenWellness", "Queima Diária", "Smart Content"
+          ]
+        }]
+      },
+      {
+        id: "B",
+        name: "Opção B: Top (1 App) + Advanced (1 App)",
+        choices: [
+          {
+            category: "TOP",
+            count: 1,
+            options: [
+              "HBO Max (com anúncios)", "Sky+ Light com Globo e Amazon SVA",
+              "Leitura360", "Cindie"
+            ]
+          },
+          {
+            category: "ADVANCED",
+            count: 1,
+            options: [
+              "Deezer", "DocWay", "Sky+ Light com Globo SVA",
+              "Kaspersky Standard (3 licenças)", "O Jornalista", "CurtaOn",
+              "HotGo", "Kiddle Pass"
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
-    codigo: "MAX_700_B",
-    nome: "Plano Max 700 • Opção B",
-    mbps: 700,
-    valor: 17999,
-    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (sem anúncios)", "Kaspersky Plus (5 licenças)", "Deezer Premium"],
-  },
-  {
-    codigo: "PLUS_MAX_700_A",
-    nome: "Plano Plus Max 700 • Opção A",
+    codigo: "PLUS_MAX_700",
+    nome: "Plano Plus Max 700",
     mbps: 700,
     valor: 19999,
-    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (sem anúncios)", "Kaspersky Plus (5 licenças)", "Sky+ Light com Globo e Amazon SVA", "Deezer Premium"],
-  },
-  {
-    codigo: "PLUS_MAX_700_B",
-    nome: "Plano Plus Max 700 • Opção B",
-    mbps: 700,
-    valor: 19999,
-    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (sem anúncios)", "Kaspersky Plus (5 licenças)", "ZenWellness", "Queima Diária", "Smart Content"],
-  },
+    options: [
+      {
+        id: "A",
+        name: "Opção A: Premium (2 Apps)",
+        choices: [{
+          category: "PREMIUM",
+          count: 2,
+          options: [
+            "HBO Max (sem anúncios)", "Kaspersky Plus (5 licenças)",
+            "ZenWellness", "Queima Diária", "Smart Content"
+          ]
+        }]
+      },
+      {
+        id: "B",
+        name: "Opção B: Top (2 Apps) + Advanced (1 App)",
+        choices: [
+          {
+            category: "TOP",
+            count: 2,
+            options: [
+              "HBO Max (com anúncios)", "Sky+ Light com Globo e Amazon SVA",
+              "Leitura360", "Cindie"
+            ]
+          },
+          {
+            category: "ADVANCED",
+            count: 1,
+            options: [
+              "Deezer", "DocWay", "Sky+ Light com Globo SVA",
+              "Kaspersky Standard (3 licenças)", "O Jornalista", "CurtaOn",
+              "HotGo", "Kiddle Pass"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+];
+
+// --- Motivos de Reserva ---
+const RESERVA_MOTIVOS = [
+  "Instalação",
+  "Mudança de Endereço",
+  "Reativação",
+  "Suporte",
+  "Recolhimento",
 ];
 
 // --- Funções utilitárias ---
@@ -182,16 +384,8 @@ function addDays(dateISO: string, days: number) {
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
-function fmtHour(h?: string | null) {
-  if (!h) return "--:--";
-  return h.slice(0, 5);
-}
-function safeText(x: any) {
-  const s = (x ?? "").toString().trim();
-  return s.length ? s : "—";
-}
-function statusTone(status?: string | null, tipo?: string | null) {
-  if (tipo === "reserva_local") return "gold";
+function statusTone(status?: string | null, tipo?: string) {
+  if (tipo === "reserva_local") return "gold"; // Reservas locais sempre gold
   const s = (status || "").toLowerCase();
   if (s.includes("reserv")) return "gold";
   if (s.includes("abert")) return "green";
@@ -200,137 +394,64 @@ function statusTone(status?: string | null, tipo?: string | null) {
   if (s.includes("encerr")) return "muted";
   return "muted";
 }
-function clienteEnderecoLinha(c?: ClienteObj | null) {
-  const e = c?.endereco;
-  const l1 = [e?.logradouro, e?.numero].filter(Boolean).join(", ");
-  const l2 = [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/")].filter(Boolean).join(" — "); // <-- AQUI FOI ADICIONADO 'const'
-  const compl = e?.complemento ? String(e.complemento) : "";
-  return [l1, l2, compl].filter(Boolean).join(" • ");
+function fmtHour(h?: string | null) {
+  if (!h) return "--:--";
+  return h.slice(0, 5);
 }
-
-function phonesLinha(c?: ClienteObj | null) {
-  const t = (c?.telefones || []).filter(Boolean);
-  return [t[0], t[1], t[2]].filter(Boolean).join(" / ");
-}
-function makeLocalId() {
-  return "L" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+function safeText(x: any) {
+  const s = (x ?? "").toString().trim();
+  return s.length ? s : "—";
 }
 function moneyBRLFromCents(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function clienteEnderecoLinha(c?: ClienteObj | null) {
+  const e = c?.endereco;
+  const l1 = [e?.logradouro, e?.numero].filter(Boolean).join(", ");
+  const l2 = [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/")].filter(Boolean).join(" — ");
+  return [l1, l2].filter(Boolean).join(" • ");
+}
+
+function phonesLinha(c?: ClienteObj | null) {
+  const t = (c?.telefones || []).filter(Boolean);
+  return t.length ? t.join(" / ") : null;
+}
+
 // --- Componente principal da página ---
-export default function Page() {
+export default function HomePage() {
+  // --- Estado da Agenda ---
   const [tab, setTab] = useState<TabKey>("agenda");
-
-  // --- Agenda: filtros e dados do Worker ---
-  const [inicio, setInicio] = useState(hojeISO());
-  const [dias, setDias] = useState(14);
-  const [viatura, setViatura] = useState("");
-  const [q, setQ] = useState("");
-  const [maxClientes, setMaxClientes] = useState("200");
-
-  const fim = useMemo(() => addDays(inicio, Math.max(0, dias - 1)), [inicio, dias]);
-
+  const [data, setData] = useState<AgendaResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [data, setData] = useState<AgendaResp | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string>("—");
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
-  // --- LocalStorage: Reservas e Instalações ---
-  const [localReserves, setLocalReserves] = useState<Item[]>([]);
-  const [localInstallations, setLocalInstallations] = useState<InstallationData[]>([]);
+  const [inicio, setInicio] = useState(hojeISO());
+  const [dias, setDias] = useState(7);
+  const fim = useMemo(() => addDays(inicio, dias - 1), [inicio, dias]);
 
-  // Carrega dados do localStorage ao iniciar
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedReserves = localStorage.getItem("localReserves");
-      if (storedReserves) setLocalReserves(JSON.parse(storedReserves));
+  const [viatura, setViatura] = useState("");
+  const [maxClientes, setMaxClientes] = useState("200");
+  const [q, setQ] = useState("");
 
-      const storedInstalls = localStorage.getItem("localInstallations");
-      if (storedInstalls) setLocalInstallations(JSON.parse(storedInstalls));
-    }
-  }, []);
-
-  // Salva reservas no localStorage
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("localReserves", JSON.stringify(localReserves));
-    }
-  }, [localReserves]);
-
-  // Salva instalações no localStorage
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("localInstallations", JSON.stringify(localInstallations));
-    }
-  }, [localInstallations]);
-
-  // --- Modal de detalhes ---
   const [selected, setSelected] = useState<FlatItem | null>(null);
 
-  // --- Form Reserva (aba "Reservar serviço") ---
+  // --- Estado das Reservas Locais (localStorage) ---
+  const [localReserves, setLocalReserves] = useState<Item[]>([]);
   const [rData, setRData] = useState(hojeISO());
   const [rHora, setRHora] = useState("08:00");
   const [rViatura, setRViatura] = useState("VT01");
-  const [rContrato, setRContrato] = useState("7333");
-  const [rMotivo, setRMotivo] = useState("Instalação"); // Default para o novo select
-  const [rUsuario, setRUsuario] = useState("weslley");
-  const [rResp, setRResp] = useState("vt01");
+  const [rContrato, setRContrato] = useState("");
+  const [rMotivo, setRMotivo] = useState(RESERVA_MOTIVOS[0]);
+  const [rUsuario, setRUsuario] = useState("");
+  const [rResp, setRResp] = useState("VT01");
   const [rClienteNome, setRClienteNome] = useState("");
   const [rEndereco, setREndereco] = useState("");
   const [rContato, setRContato] = useState("");
 
-  const RESERVA_MOTIVOS = [
-    "Instalação",
-    "Mudança de Endereço",
-    "Reativação",
-    "Suporte",
-    "Recolhimento",
-  ];
-
-  function addLocalReserve() {
-    if (!rData || !rHora || !rViatura || !rMotivo || !rClienteNome || !rEndereco || !rContato) {
-      alert("Preencha todos os campos obrigatórios da reserva!");
-      return;
-    }
-
-    const newReserve: Item = {
-      tipo: "reserva_local",
-      id: makeLocalId(),
-      contrato: rContrato,
-      status: "Reservado",
-      data: rData,
-      hora: rHora,
-      motivo: rMotivo,
-      responsavel: rViatura,
-      usuario: rUsuario,
-      cliente: {
-        nome: rClienteNome,
-        telefones: [rContato],
-        endereco: { logradouro: rEndereco },
-      },
-      _internal: {
-        // Podemos adicionar mais dados aqui se precisar
-      },
-    };
-    setLocalReserves((prev) => [...prev, newReserve]);
-    alert("Reserva adicionada à agenda (localmente)!");
-    // Limpar formulário após salvar
-    setRClienteNome("");
-    setREndereco("");
-    setRContato("");
-    setRContrato("7333");
-    setRMotivo("Instalação");
-  }
-
-  function removeLocalReserve(id: string) {
-    if (confirm("Tem certeza que deseja remover esta reserva local?")) {
-      setLocalReserves((prev) => prev.filter((r) => r.id !== id));
-    }
-  }
-
-  // --- Form Instalação (aba "Nova instalação") ---
+  // --- Estado das Instalações Locais (localStorage) ---
+  const [localInstallations, setLocalInstallations] = useState<InstallationData[]>([]);
   const [iNome, setINome] = useState("");
   const [iCpf, setICpf] = useState("");
   const [iNasc, setINasc] = useState("");
@@ -345,24 +466,130 @@ export default function Page() {
   const [iWifiNome, setIWifiNome] = useState("");
   const [iWifiSenha, setIWifiSenha] = useState("");
   const [iPlanoCodigo, setIPlanoCodigo] = useState(PLANOS[0].codigo);
+  const [iPlanoOptionId, setIPlanoOptionId] = useState(PLANOS[0].options[0].id);
   const [iAppsSelecionados, setIAppsSelecionados] = useState<string[]>([]);
 
-  const selectedPlan = useMemo(() => PLANOS.find((p) => p.codigo === iPlanoCodigo) || PLANOS[0], [iPlanoCodigo]);
+  // --- Lógica de seleção de plano e opções ---
+  const selectedPlan = useMemo(() => {
+    return PLANOS.find((p) => p.codigo === iPlanoCodigo) || PLANOS[0];
+  }, [iPlanoCodigo]);
 
-  function handleAppToggle(app: string) {
-    setIAppsSelecionados((prev) =>
-      prev.includes(app) ? prev.filter((a) => a !== app) : [...prev, app]
-    );
-  }
+  const selectedPlanOption = useMemo(() => {
+    return selectedPlan.options.find((opt) => opt.id === iPlanoOptionId) || selectedPlan.options[0];
+  }, [selectedPlan, iPlanoOptionId]);
 
-  function addLocalInstallation() {
-    if (!iNome || !iCpf || !iContato1 || !iEndereco || !iWifiNome || !iWifiSenha || iWifiSenha.length < 8) {
-      alert("Preencha todos os campos obrigatórios da ficha e verifique a senha do Wi-Fi (mín. 8 caracteres)!");
+  // --- Funções de manipulação de localStorage ---
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedReserves = localStorage.getItem("localReserves");
+      if (storedReserves) {
+        setLocalReserves(JSON.parse(storedReserves));
+      }
+      const storedInstallations = localStorage.getItem("localInstallations");
+      if (storedInstallations) {
+        setLocalInstallations(JSON.parse(storedInstallations));
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("localReserves", JSON.stringify(localReserves));
+    }
+  }, [localReserves]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("localInstallations", JSON.stringify(localInstallations));
+    }
+  }, [localInstallations]);
+
+  // --- Funções para Reservas Locais ---
+  const addLocalReserve = () => {
+    if (!rData || !rHora || !rViatura || !rMotivo || !rClienteNome || !rEndereco || !rContato) {
+      alert("Por favor, preencha todos os campos obrigatórios da reserva.");
       return;
     }
 
+    const newReserve: Item = {
+      tipo: "reserva_local",
+      id: `LOCAL-${Date.now()}`,
+      contrato: rContrato || null,
+      status: "Reservado",
+      data: rData,
+      hora: rHora,
+      motivo: rMotivo,
+      responsavel: rViatura,
+      usuario: rUsuario || null,
+      cliente: {
+        nome: rClienteNome,
+        telefones: rContato ? [rContato] : [],
+        endereco: { logradouro: rEndereco },
+      },
+      _internal: {
+        // Dados adicionais para o modal, se necessário
+      },
+    };
+    setLocalReserves((prev) => [...prev, newReserve]);
+    alert("Reserva salva no navegador e adicionada à agenda!");
+    // Limpar formulário
+    setRData(hojeISO());
+    setRHora("08:00");
+    setRViatura("VT01");
+    setRContrato("");
+    setRMotivo(RESERVA_MOTIVOS[0]);
+    setRUsuario("");
+    setRResp("VT01");
+    setRClienteNome("");
+    setREndereco("");
+    setRContato("");
+  };
+
+  const removeLocalReserve = (id: string) => {
+    if (confirm("Tem certeza que deseja remover esta reserva local?")) {
+      setLocalReserves((prev) => prev.filter((r) => r.id !== id));
+    }
+  };
+
+  // --- Funções para Instalações Locais ---
+  const handleAppToggle = (app: string, category: AppCategory, maxCount: number) => {
+    setIAppsSelecionados((prev) => {
+      const appsInCategory = selectedPlanOption.choices
+        .find(c => c.category === category)?.options || [];
+
+      const currentSelectedInCategory = prev.filter(a => appsInCategory.includes(a));
+
+      if (prev.includes(app)) {
+        return prev.filter((a) => a !== app);
+      } else {
+        if (currentSelectedInCategory.length < maxCount) {
+          return [...prev, app];
+        } else {
+          alert(`Você pode escolher no máximo ${maxCount} app(s) da categoria ${category}.`);
+          return prev;
+        }
+      }
+    });
+  };
+
+  const addLocalInstallation = () => {
+    if (!iNome || !iCpf || !iContato1 || !iEndereco || !iWifiNome || !iWifiSenha || iWifiSenha.length < 8) {
+      alert("Por favor, preencha todos os campos obrigatórios da ficha de instalação e verifique a senha do Wi-Fi (mínimo 8 dígitos).");
+      return;
+    }
+
+    // Validação de quantidade de apps selecionados por categoria
+    for (const choice of selectedPlanOption.choices) {
+      const appsInCategory = choice.options;
+      const selectedCount = iAppsSelecionados.filter(app => appsInCategory.includes(app)).length;
+      if (selectedCount !== choice.count) {
+        alert(`Para o plano ${selectedPlan.nome} - ${selectedPlanOption.name}, você precisa escolher exatamente ${choice.count} app(s) da categoria ${choice.category}.`);
+        return;
+      }
+    }
+
     const newInstallation: InstallationData = {
-      id: makeLocalId(),
+      id: `INST-${Date.now()}`,
       createdAt: new Date().toISOString(),
       status: "CRIADO",
       nomeCompleto: iNome,
@@ -382,12 +609,15 @@ export default function Page() {
       planoNome: selectedPlan.nome,
       planoMbps: selectedPlan.mbps,
       planoValor: selectedPlan.valor,
-      appsEscolhidos: iAppsSelecionados,
-      criadoPor: "usuário_local", // Pode ser dinâmico se tiver login
+      appsEscolhidos: selectedPlanOption.choices.map(choice => ({
+        category: choice.category,
+        apps: iAppsSelecionados.filter(app => choice.options.includes(app))
+      })),
+      criadoPor: "Usuário Local", // Pode ser dinâmico depois
       notasInternas: "",
     };
     setLocalInstallations((prev) => [...prev, newInstallation]);
-    alert("Ficha de instalação salva (localmente)!");
+    alert("Ficha de instalação salva no navegador!");
     // Limpar formulário
     setINome(""); setICpf(""); setINasc("");
     setIContato1(""); setIContato2(""); setIEmail("");
@@ -395,96 +625,105 @@ export default function Page() {
     setIVenc(10); setIFatura("WHATSAPP_EMAIL"); setITaxa("PIX");
     setIWifiNome(""); setIWifiSenha("");
     setIPlanoCodigo(PLANOS[0].codigo);
+    setIPlanoOptionId(PLANOS[0].options[0].id);
     setIAppsSelecionados([]);
-  }
+  };
 
-  function removeLocalInstallation(id: string) {
+  const removeLocalInstallation = (id: string) => {
     if (confirm("Tem certeza que deseja remover esta ficha de instalação local?")) {
       setLocalInstallations((prev) => prev.filter((inst) => inst.id !== id));
     }
-  }
+  };
 
-  // --- Lógica de carregamento da Agenda (SGP + Local) ---
-  async function loadAgenda() {
+  // --- Lógica de carregamento e mesclagem da Agenda ---
+  const loadAgenda = async () => {
     setLoading(true);
     setErr(null);
     try {
       const qs = new URLSearchParams({
         inicio,
         fim,
-        cliente: "1",
+        cliente: "1", // Hardcoded para o worker
         max_clientes: maxClientes,
       });
       const resp = await fetch(`/api/agenda?${qs.toString()}`, { cache: "no-store" });
-      const t = await resp.text();
-      if (!resp.ok) throw new Error(t || `HTTP ${resp.status}`);
-      setData(JSON.parse(t));
-      setLastUpdated(new Date().toLocaleString("pt-BR"));
+      const text = await resp.text();
+
+      if (!resp.ok) {
+        throw new Error(text);
+      }
+      const json: AgendaResp = JSON.parse(text);
+
+      // Mesclar com reservas locais
+      const mergedDias = new Map<string, Dia>();
+
+      // Adicionar dias do SGP
+      (json.dias || []).forEach(dia => mergedDias.set(dia.data, { ...dia }));
+
+      // Adicionar reservas locais
+      localReserves.forEach(localReserva => {
+        const reservaData = localReserva.data;
+        if (!reservaData) return; // Pular reservas sem data
+
+        // Filtrar reservas locais pelo período da agenda
+        const reservaDateTime = new Date(`${reservaData}T${localReserva.hora || '00:00'}`).getTime();
+        const inicioDateTime = new Date(`${inicio}T00:00:00`).getTime();
+        const fimDateTime = new Date(`${fim}T23:59:59`).getTime();
+
+        if (reservaDateTime < inicioDateTime || reservaDateTime > fimDateTime) {
+          return; // Fora do período, não adicionar
+        }
+
+        if (!mergedDias.has(reservaData)) {
+          mergedDias.set(reservaData, { data: reservaData, porViatura: {} });
+        }
+        const diaObj = mergedDias.get(reservaData)!;
+        const viaturaKey = localReserva.responsavel || "Sem Viatura";
+        if (!diaObj.porViatura[viaturaKey]) {
+          diaObj.porViatura[viaturaKey] = [];
+        }
+        diaObj.porViatura[viaturaKey].push(localReserva);
+      });
+
+      // Ordenar e formatar
+      const finalDias = Array.from(mergedDias.values()).sort((a, b) => a.data.localeCompare(b.data));
+      finalDias.forEach(dia => {
+        for (const viaturaKey in dia.porViatura) {
+          dia.porViatura[viaturaKey].sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
+        }
+      });
+
+      setData({ ...json, dias: finalDias });
+      setLastUpdated(new Date().toLocaleTimeString("pt-BR"));
     } catch (e: any) {
-      setData(null);
       setErr(e?.message || "Erro ao carregar agenda.");
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
     loadAgenda();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inicio, fim, maxClientes]); // Recarrega agenda se filtros mudarem
+  }, [inicio, fim, maxClientes, localReserves]); // Recarrega agenda se reservas locais mudarem
 
-  useEffect(() => {
-    function onKeyDown(ev: KeyboardEvent) {
-      if (ev.key === "Escape") setSelected(null);
-    }
-    if (selected) {
-      document.addEventListener("keydown", onKeyDown);
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.removeEventListener("keydown", onKeyDown);
-        document.body.style.overflow = "";
-      };
-    }
-  }, [selected]);
-
-  // Achata itens do Worker (SGP)
-  const workerFlat: FlatItem[] = useMemo(() => {
-    if (!data) return [];
-    const out: FlatItem[] = [];
-    for (const dia of data.dias || []) {
-      for (const v of Object.keys(dia.porViatura || {})) {
-        for (const it of dia.porViatura[v] || []) out.push({ ...it, _dia: dia.data, _viatura: v });
+  // --- Processamento dos itens para exibição na agenda ---
+  const flatItemsAll = useMemo(() => {
+    const items: FlatItem[] = [];
+    (data?.dias || []).forEach((dia) => {
+      for (const viaturaKey in dia.porViatura) {
+        (dia.porViatura[viaturaKey] || []).forEach((item) => {
+          items.push({ ...item, _dia: dia.data, _viatura: viaturaKey });
+        });
       }
-    }
-    return out;
+    });
+    return items;
   }, [data]);
 
-  // Achata reservas locais (para aparecer na agenda)
-  const localFlat: FlatItem[] = useMemo(() => {
-    // Filtra reservas locais para o período da agenda
-    const inicioTs = new Date(inicio + "T00:00:00").getTime();
-    const fimTs = new Date(fim + "T23:59:59").getTime();
-
-    return localReserves
-      .filter(res => {
-        const resDateTs = new Date(res.data + "T" + res.hora + ":00").getTime();
-        return resDateTs >= inicioTs && resDateTs <= fimTs;
-      })
-      .map((it) => ({
-        ...it,
-        _dia: it.data || "—",
-        _viatura: it.responsavel || "—",
-      }));
-  }, [localReserves, inicio, fim]);
-
-  const flatItemsAll: FlatItem[] = useMemo(() => {
-    return [...workerFlat, ...localFlat];
-  }, [workerFlat, localFlat]);
-
   const filtered = useMemo(() => {
-    const qq = q.trim().toLowerCase();
+    const qq = q.toLowerCase();
     return flatItemsAll
-      .filter((it) => (viatura ? it._viatura === viatura : true))
+      .filter((it) => (viatura ? it._viatura === viatura : true)) // <-- AQUI ESTÁ A CORREÇÃO
       .filter((it) => {
         if (!qq) return true;
         const c = it.cliente;
@@ -510,7 +749,7 @@ export default function Page() {
         return blob.includes(qq);
       })
       .sort((a, b) => `${a._dia} ${a.hora || ""}`.localeCompare(`${b._dia} ${b.hora || ""}`));
-  }, [flatItemsAll, viatura, q]);
+  }, [flatItemsAll, viatura, q]); // <-- viatura adicionado como dependência
 
   const grouped = useMemo(() => {
     const map = new Map<string, FlatItem[]>();
@@ -865,7 +1104,10 @@ export default function Page() {
                 <label>Plano E-TECH</label>
                 <select value={iPlanoCodigo} onChange={(e) => {
                   setIPlanoCodigo(e.target.value);
-                  setIAppsSelecionados([]); // Limpa apps ao mudar de plano
+                  // Ao mudar de plano, resetar a opção e os apps selecionados
+                  const newPlan = PLANOS.find(p => p.codigo === e.target.value) || PLANOS[0];
+                  setIPlanoOptionId(newPlan.options[0].id);
+                  setIAppsSelecionados([]);
                 }}>
                   {PLANOS.map((p) => (
                     <option key={p.codigo} value={p.codigo}>
@@ -875,21 +1117,42 @@ export default function Page() {
                 </select>
               </div>
 
-              <div className="field grow" style={{ gridColumn: "span 2" }}>
-                <label>Aplicativos do Plano ({selectedPlan.nome})</label>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                  {selectedPlan.apps.map((app) => (
-                    <label key={app} className="chip" style={{ cursor: "pointer" }}>
-                      <input
-                        type="checkbox"
-                        checked={iAppsSelecionados.includes(app)}
-                        onChange={() => handleAppToggle(app)}
-                        style={{ marginRight: "6px" }}
-                      />
-                      {app}
-                    </label>
-                  ))}
+              {selectedPlan.options.length > 1 && (
+                <div className="field grow">
+                  <label>Formato do Plano</label>
+                  <select value={iPlanoOptionId} onChange={(e) => {
+                    setIPlanoOptionId(e.target.value);
+                    setIAppsSelecionados([]); // Limpa apps ao mudar de opção
+                  }}>
+                    {selectedPlan.options.map((opt) => (
+                      <option key={opt.id} value={opt.id}>{opt.name}</option>
+                    ))}
+                  </select>
                 </div>
+              )}
+
+              <div className="field grow" style={{ gridColumn: "1 / -1" }}>
+                <label>Aplicativos do Plano ({selectedPlan.nome} - {selectedPlanOption.name})</label>
+                {selectedPlanOption.choices.map((choice) => (
+                  <div key={choice.category} className="appGroup">
+                    <div className="appGroupTitle">
+                      {choice.category} (Escolha {choice.count} app{choice.count > 1 ? 's' : ''})
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                      {choice.options.map((app) => (
+                        <label key={app} className="chip" style={{ cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={iAppsSelecionados.includes(app)}
+                            onChange={() => handleAppToggle(app, choice.category, choice.count)}
+                            style={{ marginRight: "6px" }}
+                          />
+                          {app}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
 
               <div className="field" style={{ gridColumn: "span 3", display: "flex", justifyContent: "flex-end" }}>
