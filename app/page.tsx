@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+// --- Tipos de dados (para o SGP e para o local) ---
 type ClienteEndereco = {
   logradouro?: string | null;
   numero?: string | null;
@@ -34,7 +35,7 @@ type Item = {
   responsavel?: string | null; // VT01...
   usuario?: string | null;
   cliente?: ClienteObj | null;
-  _internal?: any;
+  _internal?: any; // Para dados internos como reservationId
 };
 
 type Dia = { data: string; porViatura: Record<string, Item[]> };
@@ -49,6 +50,127 @@ type FlatItem = Item & { _dia: string; _viatura: string };
 
 type TabKey = "agenda" | "reservar" | "instalacao";
 
+// --- Tipos para a Ficha de Instalação (localStorage) ---
+type InstallStatus = "CRIADO" | "AGENDADO" | "CADASTRADO_SGP" | "FINALIZADO" | "CANCELADO";
+type BillingDelivery = "WHATSAPP_EMAIL" | "APP";
+type InstallFeePayment = "DINHEIRO" | "PIX" | "CARTAO";
+
+type InstallationData = {
+  id: string;
+  createdAt: string;
+  status: InstallStatus;
+  nomeCompleto: string;
+  cpf: string;
+  nascimento?: string | null;
+  contato1: string;
+  contato2?: string | null;
+  email?: string | null;
+  enderecoFull: string;
+  referencia?: string | null;
+  vencimentoDia: 10 | 20 | 30;
+  entregaFatura: BillingDelivery;
+  taxaPagamento: InstallFeePayment;
+  wifiNome: string;
+  wifiSenha: string;
+  planoCodigo: string;
+  planoNome: string;
+  planoMbps?: number | null;
+  planoValor?: number | null;
+  appsEscolhidos?: string[]; // Lista de apps
+  criadoPor?: string | null;
+  notasInternas?: string | null;
+  reservaId?: string | null; // Link para a reserva local
+};
+
+// --- Dados dos Planos (para o formulário) ---
+const PLANOS = [
+  {
+    codigo: "ESSENCIAL_100",
+    nome: "Plano Essencial 100",
+    mbps: 100,
+    valor: 8499,
+    apps: ["Leitura360", "Cindie"],
+  },
+  {
+    codigo: "MINI_PLUS_300",
+    nome: "Plano Mini Plus 300",
+    mbps: 300,
+    valor: 10999,
+    apps: ["Leitura360", "Cindie", "Estádio TNT Sports"],
+  },
+  {
+    codigo: "PLUS_300_OPCAO_A",
+    nome: "Plano Plus 300 • Opção A",
+    mbps: 300,
+    valor: 11999,
+    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "Deezer Premium"],
+  },
+  {
+    codigo: "PLUS_300_OPCAO_B",
+    nome: "Plano Plus 300 • Opção B",
+    mbps: 300,
+    valor: 11999,
+    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (com anúncios)"],
+  },
+  {
+    codigo: "ULTRA_500_A",
+    nome: "Plano Ultra 500 • Opção A",
+    mbps: 500,
+    valor: 14999,
+    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "Deezer Premium", "HBO Max (com anúncios)"],
+  },
+  {
+    codigo: "ULTRA_500_B",
+    nome: "Plano Ultra 500 • Opção B",
+    mbps: 500,
+    valor: 14999,
+    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (com anúncios)", "Sky+ Light com Globo e Amazon SVA"],
+  },
+  {
+    codigo: "ULTRA_500_C",
+    nome: "Plano Ultra 500 • Opção C",
+    mbps: 500,
+    valor: 14999,
+    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (com anúncios)", "Kaspersky Plus (1 licença)"],
+  },
+  {
+    codigo: "PREMIUM_ULTRA_500",
+    nome: "Plano Premium Ultra 500",
+    mbps: 500,
+    valor: 15999,
+    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (sem anúncios)", "Kaspersky Plus (3 licenças)"],
+  },
+  {
+    codigo: "MAX_700_A",
+    nome: "Plano Max 700 • Opção A",
+    mbps: 700,
+    valor: 17999,
+    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (sem anúncios)", "Kaspersky Plus (5 licenças)", "Sky+ Light com Globo e Amazon SVA"],
+  },
+  {
+    codigo: "MAX_700_B",
+    nome: "Plano Max 700 • Opção B",
+    mbps: 700,
+    valor: 17999,
+    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (sem anúncios)", "Kaspersky Plus (5 licenças)", "Deezer Premium"],
+  },
+  {
+    codigo: "PLUS_MAX_700_A",
+    nome: "Plano Plus Max 700 • Opção A",
+    mbps: 700,
+    valor: 19999,
+    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (sem anúncios)", "Kaspersky Plus (5 licenças)", "Sky+ Light com Globo e Amazon SVA", "Deezer Premium"],
+  },
+  {
+    codigo: "PLUS_MAX_700_B",
+    nome: "Plano Plus Max 700 • Opção B",
+    mbps: 700,
+    valor: 19999,
+    apps: ["Leitura360", "Cindie", "Estádio TNT Sports", "HBO Max (sem anúncios)", "Kaspersky Plus (5 licenças)", "ZenWellness", "Queima Diária", "Smart Content"],
+  },
+];
+
+// --- Funções utilitárias ---
 function hojeISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -81,8 +203,7 @@ function statusTone(status?: string | null, tipo?: string | null) {
 function clienteEnderecoLinha(c?: ClienteObj | null) {
   const e = c?.endereco;
   const l1 = [e?.logradouro, e?.numero].filter(Boolean).join(", ");
-  const cidadeUf = [e?.cidade, e?.uf].filter(Boolean).join("/");
-  const l2 = [e?.bairro, cidadeUf].filter(Boolean).join(" — ");
+  const cidadeUf = [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/")].filter(Boolean).join(" — ");
   const compl = e?.complemento ? String(e.complemento) : "";
   return [l1, l2, compl].filter(Boolean).join(" • ");
 }
@@ -90,15 +211,18 @@ function phonesLinha(c?: ClienteObj | null) {
   const t = (c?.telefones || []).filter(Boolean);
   return [t[0], t[1], t[2]].filter(Boolean).join(" / ");
 }
-
 function makeLocalId() {
   return "L" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
 }
+function moneyBRLFromCents(cents: number) {
+  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
 
+// --- Componente principal da página ---
 export default function Page() {
   const [tab, setTab] = useState<TabKey>("agenda");
 
-  // Agenda filtros
+  // --- Agenda: filtros e dados do Worker ---
   const [inicio, setInicio] = useState(hojeISO());
   const [dias, setDias] = useState(14);
   const [viatura, setViatura] = useState("");
@@ -107,31 +231,105 @@ export default function Page() {
 
   const fim = useMemo(() => addDays(inicio, Math.max(0, dias - 1)), [inicio, dias]);
 
-  // Dados do Worker
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [data, setData] = useState<AgendaResp | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("—");
 
-  // Reservas locais (somente visual)
+  // --- LocalStorage: Reservas e Instalações ---
   const [localReserves, setLocalReserves] = useState<Item[]>([]);
+  const [localInstallations, setLocalInstallations] = useState<InstallationData[]>([]);
 
-  // Modal
+  // Carrega dados do localStorage ao iniciar
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedReserves = localStorage.getItem("localReserves");
+      if (storedReserves) setLocalReserves(JSON.parse(storedReserves));
+
+      const storedInstalls = localStorage.getItem("localInstallations");
+      if (storedInstalls) setLocalInstallations(JSON.parse(storedInstalls));
+    }
+  }, []);
+
+  // Salva reservas no localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("localReserves", JSON.stringify(localReserves));
+    }
+  }, [localReserves]);
+
+  // Salva instalações no localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("localInstallations", JSON.stringify(localInstallations));
+    }
+  }, [localInstallations]);
+
+  // --- Modal de detalhes ---
   const [selected, setSelected] = useState<FlatItem | null>(null);
 
-  // Form Reserva (aba)
+  // --- Form Reserva (aba "Reservar serviço") ---
   const [rData, setRData] = useState(hojeISO());
   const [rHora, setRHora] = useState("08:00");
   const [rViatura, setRViatura] = useState("VT01");
   const [rContrato, setRContrato] = useState("7333");
-  const [rMotivo, setRMotivo] = useState("Mudança de endereço");
+  const [rMotivo, setRMotivo] = useState("Instalação"); // Default para o novo select
   const [rUsuario, setRUsuario] = useState("weslley");
   const [rResp, setRResp] = useState("vt01");
   const [rClienteNome, setRClienteNome] = useState("");
   const [rEndereco, setREndereco] = useState("");
   const [rContato, setRContato] = useState("");
 
-  // Form Instalação (aba) — visual apenas
+  const RESERVA_MOTIVOS = [
+    "Instalação",
+    "Mudança de Endereço",
+    "Reativação",
+    "Suporte",
+    "Recolhimento",
+  ];
+
+  function addLocalReserve() {
+    if (!rData || !rHora || !rViatura || !rMotivo || !rClienteNome || !rEndereco || !rContato) {
+      alert("Preencha todos os campos obrigatórios da reserva!");
+      return;
+    }
+
+    const newReserve: Item = {
+      tipo: "reserva_local",
+      id: makeLocalId(),
+      contrato: rContrato,
+      status: "Reservado",
+      data: rData,
+      hora: rHora,
+      motivo: rMotivo,
+      responsavel: rViatura,
+      usuario: rUsuario,
+      cliente: {
+        nome: rClienteNome,
+        telefones: [rContato],
+        endereco: { logradouro: rEndereco },
+      },
+      _internal: {
+        // Podemos adicionar mais dados aqui se precisar
+      },
+    };
+    setLocalReserves((prev) => [...prev, newReserve]);
+    alert("Reserva adicionada à agenda (localmente)!");
+    // Limpar formulário após salvar
+    setRClienteNome("");
+    setREndereco("");
+    setRContato("");
+    setRContrato("7333");
+    setRMotivo("Instalação");
+  }
+
+  function removeLocalReserve(id: string) {
+    if (confirm("Tem certeza que deseja remover esta reserva local?")) {
+      setLocalReserves((prev) => prev.filter((r) => r.id !== id));
+    }
+  }
+
+  // --- Form Instalação (aba "Nova instalação") ---
   const [iNome, setINome] = useState("");
   const [iCpf, setICpf] = useState("");
   const [iNasc, setINasc] = useState("");
@@ -140,14 +338,72 @@ export default function Page() {
   const [iEmail, setIEmail] = useState("");
   const [iEndereco, setIEndereco] = useState("");
   const [iRef, setIRef] = useState("");
-  const [iVenc, setIVenc] = useState(10);
-  const [iFatura, setIFatura] = useState<"WHATSAPP_EMAIL" | "APP">("WHATSAPP_EMAIL");
-  const [iTaxa, setITaxa] = useState<"DINHEIRO" | "PIX" | "CARTAO">("PIX");
+  const [iVenc, setIVenc] = useState<10 | 20 | 30>(10);
+  const [iFatura, setIFatura] = useState<BillingDelivery>("WHATSAPP_EMAIL");
+  const [iTaxa, setITaxa] = useState<InstallFeePayment>("PIX");
   const [iWifiNome, setIWifiNome] = useState("");
   const [iWifiSenha, setIWifiSenha] = useState("");
-  const [iPlano, setIPlano] = useState("ESSENCIAL_100");
-  const [iApps, setIApps] = useState("");
+  const [iPlanoCodigo, setIPlanoCodigo] = useState(PLANOS[0].codigo);
+  const [iAppsSelecionados, setIAppsSelecionados] = useState<string[]>([]);
 
+  const selectedPlan = useMemo(() => PLANOS.find((p) => p.codigo === iPlanoCodigo) || PLANOS[0], [iPlanoCodigo]);
+
+  function handleAppToggle(app: string) {
+    setIAppsSelecionados((prev) =>
+      prev.includes(app) ? prev.filter((a) => a !== app) : [...prev, app]
+    );
+  }
+
+  function addLocalInstallation() {
+    if (!iNome || !iCpf || !iContato1 || !iEndereco || !iWifiNome || !iWifiSenha || iWifiSenha.length < 8) {
+      alert("Preencha todos os campos obrigatórios da ficha e verifique a senha do Wi-Fi (mín. 8 caracteres)!");
+      return;
+    }
+
+    const newInstallation: InstallationData = {
+      id: makeLocalId(),
+      createdAt: new Date().toISOString(),
+      status: "CRIADO",
+      nomeCompleto: iNome,
+      cpf: iCpf,
+      nascimento: iNasc || null,
+      contato1: iContato1,
+      contato2: iContato2 || null,
+      email: iEmail || null,
+      enderecoFull: iEndereco,
+      referencia: iRef || null,
+      vencimentoDia: iVenc,
+      entregaFatura: iFatura,
+      taxaPagamento: iTaxa,
+      wifiNome: iWifiNome,
+      wifiSenha: iWifiSenha,
+      planoCodigo: selectedPlan.codigo,
+      planoNome: selectedPlan.nome,
+      planoMbps: selectedPlan.mbps,
+      planoValor: selectedPlan.valor,
+      appsEscolhidos: iAppsSelecionados,
+      criadoPor: "usuário_local", // Pode ser dinâmico se tiver login
+      notasInternas: "",
+    };
+    setLocalInstallations((prev) => [...prev, newInstallation]);
+    alert("Ficha de instalação salva (localmente)!");
+    // Limpar formulário
+    setINome(""); setICpf(""); setINasc("");
+    setIContato1(""); setIContato2(""); setIEmail("");
+    setIEndereco(""); setIRef("");
+    setIVenc(10); setIFatura("WHATSAPP_EMAIL"); setITaxa("PIX");
+    setIWifiNome(""); setIWifiSenha("");
+    setIPlanoCodigo(PLANOS[0].codigo);
+    setIAppsSelecionados([]);
+  }
+
+  function removeLocalInstallation(id: string) {
+    if (confirm("Tem certeza que deseja remover esta ficha de instalação local?")) {
+      setLocalInstallations((prev) => prev.filter((inst) => inst.id !== id));
+    }
+  }
+
+  // --- Lógica de carregamento da Agenda (SGP + Local) ---
   async function loadAgenda() {
     setLoading(true);
     setErr(null);
@@ -174,7 +430,7 @@ export default function Page() {
   useEffect(() => {
     loadAgenda();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [inicio, fim, maxClientes]); // Recarrega agenda se filtros mudarem
 
   useEffect(() => {
     function onKeyDown(ev: KeyboardEvent) {
@@ -190,7 +446,7 @@ export default function Page() {
     }
   }, [selected]);
 
-  // Achata itens do Worker
+  // Achata itens do Worker (SGP)
   const workerFlat: FlatItem[] = useMemo(() => {
     if (!data) return [];
     const out: FlatItem[] = [];
@@ -204,12 +460,21 @@ export default function Page() {
 
   // Achata reservas locais (para aparecer na agenda)
   const localFlat: FlatItem[] = useMemo(() => {
-    return localReserves.map((it) => ({
-      ...it,
-      _dia: it.data || "—",
-      _viatura: it.responsavel || "—",
-    }));
-  }, [localReserves]);
+    // Filtra reservas locais para o período da agenda
+    const inicioTs = new Date(inicio + "T00:00:00").getTime();
+    const fimTs = new Date(fim + "T23:59:59").getTime();
+
+    return localReserves
+      .filter(res => {
+        const resDateTs = new Date(res.data + "T" + res.hora + ":00").getTime();
+        return resDateTs >= inicioTs && resDateTs <= fimTs;
+      })
+      .map((it) => ({
+        ...it,
+        _dia: it.data || "—",
+        _viatura: it.responsavel || "—",
+      }));
+  }, [localReserves, inicio, fim]);
 
   const flatItemsAll: FlatItem[] = useMemo(() => {
     return [...workerFlat, ...localFlat];
@@ -256,44 +521,12 @@ export default function Page() {
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [filtered]);
 
-  function addLocalReserve() {
-    const id = makeLocalId();
-    const item: Item = {
-      tipo: "reserva_local",
-      id: `RES-${id}`,
-      status: "Reservado (local)",
-      data: rData,
-      hora: rHora,
-      responsavel: rViatura,
-      usuario: rUsuario,
-      motivo: rMotivo,
-      contrato: rContrato,
-      cliente: {
-        nome: rClienteNome || "—",
-        telefones: rContato ? [rContato] : [],
-        email: "",
-        plano: "",
-        observacao: "",
-        contratoId: rContrato || "",
-        endereco: { logradouro: rEndereco || "—" },
-      },
-      _internal: { local: true, resp: rResp },
-    };
-
-    setLocalReserves((prev) => [item, ...prev]);
-    setTab("agenda");
-  }
-
-  function removeLocalReserve(id: string) {
-    setLocalReserves((prev) => prev.filter((x) => x.id !== id));
-  }
-
   return (
     <>
       <header className="topbar">
         <div className="container topbarInner">
           <div className="brand">
-            <div className="brandLogo">e</div>
+            <div className="brandLogo">E</div>
             <div>
               <div className="brandTitle">Agenda Operacional</div>
               <div className="brandSub">Etech • SGP</div>
@@ -305,10 +538,10 @@ export default function Page() {
               Agenda
             </button>
             <button className={cx("tab", tab === "reservar" && "tabActive")} onClick={() => setTab("reservar")}>
-              Reservar serviço (visual)
+              Reservar serviço
             </button>
             <button className={cx("tab", tab === "instalacao" && "tabActive")} onClick={() => setTab("instalacao")}>
-              Nova instalação (ficha)
+              Nova instalação
             </button>
           </nav>
 
@@ -323,6 +556,7 @@ export default function Page() {
       </header>
 
       <div className="container">
+        {/* --- ABA AGENDA --- */}
         {tab === "agenda" ? (
           <>
             <section className="panel filters">
@@ -451,11 +685,12 @@ export default function Page() {
           </>
         ) : null}
 
+        {/* --- ABA RESERVAR SERVIÇO --- */}
         {tab === "reservar" ? (
           <section className="panel" style={{ marginTop: 14, padding: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ fontWeight: 950 }}>Reservar serviço (apenas visual na tela)</div>
-              <div className="chip">Some ao atualizar a página</div>
+              <div style={{ fontWeight: 950 }}>Reservar serviço (salvo no navegador)</div>
+              <div className="chip">Os dados ficam salvos neste navegador</div>
             </div>
 
             <div className="filters">
@@ -483,7 +718,11 @@ export default function Page() {
 
               <div className="field grow">
                 <label>Motivo</label>
-                <input value={rMotivo} onChange={(e) => setRMotivo(e.target.value)} />
+                <select value={rMotivo} onChange={(e) => setRMotivo(e.target.value)}>
+                  {RESERVA_MOTIVOS.map((motivo) => (
+                    <option key={motivo} value={motivo}>{motivo}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="field">
@@ -514,14 +753,14 @@ export default function Page() {
               <div className="field">
                 <label>&nbsp;</label>
                 <button className="btn primary" onClick={addLocalReserve}>
-                  Reservar na tela
+                  Salvar Reserva
                 </button>
               </div>
             </div>
 
             <div className="hr" />
 
-            <div style={{ fontWeight: 950, marginBottom: 10 }}>Reservas locais (remover)</div>
+            <div style={{ fontWeight: 950, marginBottom: 10 }}>Reservas salvas (neste navegador)</div>
             {localReserves.length === 0 ? (
               <div className="chip">Nenhuma reserva local criada.</div>
             ) : (
@@ -542,11 +781,12 @@ export default function Page() {
           </section>
         ) : null}
 
+        {/* --- ABA NOVA INSTALAÇÃO --- */}
         {tab === "instalacao" ? (
           <section className="panel" style={{ marginTop: 14, padding: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ fontWeight: 950 }}>Ficha de instalação (apenas visual)</div>
-              <div className="chip">Não salva — só para preencher e revisar</div>
+              <div style={{ fontWeight: 950 }}>Ficha de instalação (salva no navegador)</div>
+              <div className="chip">Os dados ficam salvos neste navegador</div>
             </div>
 
             <div className="filters">
@@ -559,12 +799,12 @@ export default function Page() {
                 <input value={iCpf} onChange={(e) => setICpf(e.target.value)} />
               </div>
               <div className="field">
-                <label>Nascimento</label>
+                <label>Data de Nascimento</label>
                 <input type="date" value={iNasc} onChange={(e) => setINasc(e.target.value)} />
               </div>
 
               <div className="field grow">
-                <label>Contato 1</label>
+                <label>Contato 1 (WhatsApp)</label>
                 <input value={iContato1} onChange={(e) => setIContato1(e.target.value)} />
               </div>
               <div className="field grow">
@@ -586,8 +826,8 @@ export default function Page() {
               </div>
 
               <div className="field">
-                <label>Vencimento</label>
-                <select value={iVenc} onChange={(e) => setIVenc(Number(e.target.value))}>
+                <label>Dia de vencimento</label>
+                <select value={iVenc} onChange={(e) => setIVenc(Number(e.target.value) as 10 | 20 | 30)}>
                   <option value={10}>Dia 10</option>
                   <option value={20}>Dia 20</option>
                   <option value={30}>Dia 30</option>
@@ -595,16 +835,16 @@ export default function Page() {
               </div>
 
               <div className="field">
-                <label>Fatura</label>
-                <select value={iFatura} onChange={(e) => setIFatura(e.target.value as any)}>
+                <label>Receber fatura</label>
+                <select value={iFatura} onChange={(e) => setIFatura(e.target.value as BillingDelivery)}>
                   <option value="WHATSAPP_EMAIL">WhatsApp/E-mail</option>
-                  <option value="APP">Central do Cliente (App)</option>
+                  <option value="APP">Central do Cliente (Aplicativo)</option>
                 </select>
               </div>
 
               <div className="field">
-                <label>Taxa Instalação</label>
-                <select value={iTaxa} onChange={(e) => setITaxa(e.target.value as any)}>
+                <label>Pagamento da taxa (R$50,00)</label>
+                <select value={iTaxa} onChange={(e) => setITaxa(e.target.value as InstallFeePayment)}>
                   <option value="DINHEIRO">Dinheiro</option>
                   <option value="PIX">PIX</option>
                   <option value="CARTAO">Cartão</option>
@@ -612,49 +852,72 @@ export default function Page() {
               </div>
 
               <div className="field grow">
-                <label>Wi-Fi Nome</label>
+                <label>Nome do Wi-Fi</label>
                 <input value={iWifiNome} onChange={(e) => setIWifiNome(e.target.value)} />
               </div>
               <div className="field grow">
-                <label>Wi-Fi Senha (mín 8)</label>
+                <label>Senha do Wi-Fi (mínimo 8 dígitos)</label>
                 <input value={iWifiSenha} onChange={(e) => setIWifiSenha(e.target.value)} />
               </div>
 
               <div className="field grow">
-                <label>Plano</label>
-                <select value={iPlano} onChange={(e) => setIPlano(e.target.value)}>
-                  <option value="ESSENCIAL_100">Essencial 100</option>
-                  <option value="MINI_PLUS_300">Mini Plus 300</option>
-                  <option value="PLUS_300">Plus 300</option>
-                  <option value="ULTRA_500">Ultra 500</option>
-                  <option value="PREMIUM_500">Premium 500</option>
-                  <option value="MAX_700">Max 700</option>
+                <label>Plano E-TECH</label>
+                <select value={iPlanoCodigo} onChange={(e) => {
+                  setIPlanoCodigo(e.target.value);
+                  setIAppsSelecionados([]); // Limpa apps ao mudar de plano
+                }}>
+                  {PLANOS.map((p) => (
+                    <option key={p.codigo} value={p.codigo}>
+                      {p.nome} ({p.mbps}MB) - {moneyBRLFromCents(p.valor)}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <div className="field grow">
-                <label>Apps / Preferências</label>
-                <textarea value={iApps} onChange={(e) => setIApps(e.target.value)} placeholder="Ex.: Advanced, Premium, Kaspersky..." />
+              <div className="field grow" style={{ gridColumn: "span 2" }}>
+                <label>Aplicativos do Plano ({selectedPlan.nome})</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {selectedPlan.apps.map((app) => (
+                    <label key={app} className="chip" style={{ cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={iAppsSelecionados.includes(app)}
+                        onChange={() => handleAppToggle(app)}
+                        style={{ marginRight: "6px" }}
+                      />
+                      {app}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="field" style={{ gridColumn: "span 3", display: "flex", justifyContent: "flex-end" }}>
+                <button className="btn primary" onClick={addLocalInstallation}>
+                  Salvar Ficha
+                </button>
               </div>
             </div>
 
             <div className="hr" />
 
-            <div style={{ fontWeight: 950, marginBottom: 10 }}>Prévia da ficha</div>
-            <section className="panel" style={{ padding: 12, background: "rgba(6,10,18,.35)" }}>
-              <div className="kvRow"><span className="k">Cliente</span><span className="v">{safeText(iNome)}</span></div>
-              <div className="kvRow"><span className="k">CPF</span><span className="v">{safeText(iCpf)}</span></div>
-              <div className="kvRow"><span className="k">Contato</span><span className="v">{safeText(iContato1)} {iContato2 ? ` / ${iContato2}` : ""}</span></div>
-              <div className="kvRow"><span className="k">E-mail</span><span className="v">{safeText(iEmail)}</span></div>
-              <div className="kvRow"><span className="k">Endereço</span><span className="v vClamp2">{safeText(iEndereco)}</span></div>
-              <div className="kvRow"><span className="k">Ref.</span><span className="v vClamp2">{safeText(iRef)}</span></div>
-              <div className="kvRow"><span className="k">Venc.</span><span className="v">Dia {iVenc}</span></div>
-              <div className="kvRow"><span className="k">Fatura</span><span className="v">{iFatura}</span></div>
-              <div className="kvRow"><span className="k">Taxa</span><span className="v">{iTaxa}</span></div>
-              <div className="kvRow"><span className="k">Wi-Fi</span><span className="v">{safeText(iWifiNome)}</span></div>
-              <div className="kvRow"><span className="k">Plano</span><span className="v">{iPlano}</span></div>
-              <div className="kvRow"><span className="k">Apps</span><span className="v vClamp2">{safeText(iApps)}</span></div>
-            </section>
+            <div style={{ fontWeight: 950, marginBottom: 10 }}>Fichas de Instalação salvas (neste navegador)</div>
+            {localInstallations.length === 0 ? (
+              <div className="chip">Nenhuma ficha de instalação salva.</div>
+            ) : (
+              <div className="installationsList">
+                {localInstallations.map((inst) => (
+                  <div key={inst.id} className="installationItem">
+                    <div className="name">{inst.nomeCompleto}</div>
+                    <div className="contact">{inst.contato1} {inst.email ? `• ${inst.email}` : ''}</div>
+                    <div className="plan">{inst.planoNome} • {inst.status}</div>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", gridColumn: "span 3" }}>
+                      <button className="btn" onClick={() => alert(`Detalhes de ${inst.nomeCompleto}:\n${JSON.stringify(inst, null, 2)}`)}>Ver Detalhes</button>
+                      <button className="btn" onClick={() => removeLocalInstallation(inst.id)}>Remover</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         ) : null}
 
@@ -663,7 +926,7 @@ export default function Page() {
         </footer>
       </div>
 
-      {/* MODAL DETALHES */}
+      {/* --- MODAL DETALHES (para itens da agenda) --- */}
       {selected ? (
         <div className="overlay" onMouseDown={() => setSelected(null)}>
           <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
