@@ -203,10 +203,11 @@ function statusTone(status?: string | null, tipo?: string | null) {
 function clienteEnderecoLinha(c?: ClienteObj | null) {
   const e = c?.endereco;
   const l1 = [e?.logradouro, e?.numero].filter(Boolean).join(", ");
-  const cidadeUf = [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/")].filter(Boolean).join(" — ");
+  const l2 = [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/")].filter(Boolean).join(" — "); // <-- AQUI FOI ADICIONADO 'const'
   const compl = e?.complemento ? String(e.complemento) : "";
   return [l1, l2, compl].filter(Boolean).join(" • ");
 }
+
 function phonesLinha(c?: ClienteObj | null) {
   const t = (c?.telefones || []).filter(Boolean);
   return [t[0], t[1], t[2]].filter(Boolean).join(" / ");
