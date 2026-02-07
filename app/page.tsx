@@ -24,42 +24,30 @@ type ClienteObj = {
 };
 
 type Item = {
-  tipo: string;
+  tipo: string; // os | reserva_local
   id: string;
   contrato?: string | null;
-  contrato_status?: string | null;
-  status_id?: number | null;
   status?: string | null;
-  data?: string | null;
-  hora?: string | null;
+  data?: string | null; // YYYY-MM-DD
+  hora?: string | null; // HH:mm
   motivo?: string | null;
-  responsavel?: string | null;
+  responsavel?: string | null; // VT01...
   usuario?: string | null;
   cliente?: ClienteObj | null;
-  titulo?: string | null;
-  inicioISO?: string | null;
-  fimISO?: string | null;
+  _internal?: any;
 };
 
-type Dia = {
-  data: string;
-  porViatura: Record<string, Item[]>;
-};
-
+type Dia = { data: string; porViatura: Record<string, Item[]> };
 type AgendaResp = {
-  range: { inicio: string; fim: string };
-  parametros: { cliente: number; max_clientes: number };
-  meta?: {
-    contratos_unicos_total?: number;
-    contratos_consultados?: number;
-    aviso?: string | null;
-  };
-  totais: { os: number; reservas: number };
   viaturas: string[];
   dias: Dia[];
+  totais?: { os?: number; reservas?: number };
+  meta?: any;
 };
 
 type FlatItem = Item & { _dia: string; _viatura: string };
+
+type TabKey = "agenda" | "reservar" | "instalacao";
 
 function hojeISO() {
   return new Date().toISOString().slice(0, 10);
@@ -72,15 +60,6 @@ function addDays(dateISO: string, days: number) {
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
-function statusTone(status?: string | null) {
-  const s = (status || "").toLowerCase();
-  if (s.includes("reserv")) return "gold";
-  if (s.includes("abert")) return "green";
-  if (s.includes("execu")) return "orange";
-  if (s.includes("pend")) return "red";
-  if (s.includes("encerr")) return "muted";
-  return "muted";
-}
 function fmtHour(h?: string | null) {
   if (!h) return "--:--";
   return h.slice(0, 5);
@@ -89,46 +68,16 @@ function safeText(x: any) {
   const s = (x ?? "").toString().trim();
   return s.length ? s : "—";
 }
-function parseFromURL() {
-  if (typeof window === "undefined") return null;
-  const sp = new URLSearchParams(window.location.search);
-
-  const inicio = sp.get("inicio") || hojeISO();
-  const dias = Number(sp.get("dias") || "14") || 14;
-
-  const viatura = sp.get("viatura") || "";
-  const status = sp.get("status") || "";
-  const q = sp.get("q") || "";
-
-  const cliente = sp.get("cliente") || "1";
-  const max_clientes = sp.get("max_clientes") || "250";
-
-  const group = (sp.get("group") as "dia" | "viatura") || "dia";
-
-  return { inicio, dias, viatura, status, q, cliente, max_clientes, group };
+function statusTone(status?: string | null, tipo?: string | null) {
+  if (tipo === "reserva_local") return "gold";
+  const s = (status || "").toLowerCase();
+  if (s.includes("reserv")) return "gold";
+  if (s.includes("abert")) return "green";
+  if (s.includes("execu")) return "orange";
+  if (s.includes("pend")) return "red";
+  if (s.includes("encerr")) return "muted";
+  return "muted";
 }
-function pushToURL(state: {
-  inicio: string;
-  dias: number;
-  viatura: string;
-  status: string;
-  q: string;
-  cliente: string;
-  max_clientes: string;
-  group: "dia" | "viatura";
-}) {
-  const sp = new URLSearchParams();
-  sp.set("inicio", state.inicio);
-  sp.set("dias", String(state.dias));
-  if (state.viatura) sp.set("viatura", state.viatura);
-  if (state.status) sp.set("status", state.status);
-  if (state.q) sp.set("q", state.q);
-  sp.set("cliente", state.cliente);
-  sp.set("max_clientes", state.max_clientes);
-  sp.set("group", state.group);
-  window.history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
-}
-
 function clienteEnderecoLinha(c?: ClienteObj | null) {
   const e = c?.endereco;
   const l1 = [e?.logradouro, e?.numero].filter(Boolean).join(", ");
@@ -137,73 +86,82 @@ function clienteEnderecoLinha(c?: ClienteObj | null) {
   const compl = e?.complemento ? String(e.complemento) : "";
   return [l1, l2, compl].filter(Boolean).join(" • ");
 }
-
 function phonesLinha(c?: ClienteObj | null) {
   const t = (c?.telefones || []).filter(Boolean);
   return [t[0], t[1], t[2]].filter(Boolean).join(" / ");
 }
 
-function stop(e: React.MouseEvent) {
-  e.preventDefault();
-  e.stopPropagation();
+function makeLocalId() {
+  return "L" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
 }
 
 export default function Page() {
-  const initial = useMemo(() => parseFromURL(), []);
+  const [tab, setTab] = useState<TabKey>("agenda");
 
-  const [inicio, setInicio] = useState(initial?.inicio ?? hojeISO());
-  const [dias, setDias] = useState<number>(initial?.dias ?? 14);
+  // Agenda filtros
+  const [inicio, setInicio] = useState(hojeISO());
+  const [dias, setDias] = useState(14);
+  const [viatura, setViatura] = useState("");
+  const [q, setQ] = useState("");
+  const [maxClientes, setMaxClientes] = useState("200");
 
-  const [viatura, setViatura] = useState(initial?.viatura ?? "");
-  const [status, setStatus] = useState(initial?.status ?? "");
-  const [q, setQ] = useState(initial?.q ?? "");
+  const fim = useMemo(() => addDays(inicio, Math.max(0, dias - 1)), [inicio, dias]);
 
-  const [clienteFlag, setClienteFlag] = useState(initial?.cliente ?? "1");
-  const [maxClientes, setMaxClientes] = useState(initial?.max_clientes ?? "250");
-
-  const [group, setGroup] = useState<"dia" | "viatura">(initial?.group ?? "dia");
-
+  // Dados do Worker
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [data, setData] = useState<AgendaResp | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("—");
 
+  // Reservas locais (somente visual)
+  const [localReserves, setLocalReserves] = useState<Item[]>([]);
+
+  // Modal
   const [selected, setSelected] = useState<FlatItem | null>(null);
 
-  const fim = useMemo(() => addDays(inicio, Math.max(0, dias - 1)), [inicio, dias]);
+  // Form Reserva (aba)
+  const [rData, setRData] = useState(hojeISO());
+  const [rHora, setRHora] = useState("08:00");
+  const [rViatura, setRViatura] = useState("VT01");
+  const [rContrato, setRContrato] = useState("7333");
+  const [rMotivo, setRMotivo] = useState("Mudança de endereço");
+  const [rUsuario, setRUsuario] = useState("weslley");
+  const [rResp, setRResp] = useState("vt01");
+  const [rClienteNome, setRClienteNome] = useState("");
+  const [rEndereco, setREndereco] = useState("");
+  const [rContato, setRContato] = useState("");
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    pushToURL({
-      inicio,
-      dias,
-      viatura,
-      status,
-      q,
-      cliente: clienteFlag,
-      max_clientes: maxClientes,
-      group,
-    });
-  }, [inicio, dias, viatura, status, q, clienteFlag, maxClientes, group]);
+  // Form Instalação (aba) — visual apenas
+  const [iNome, setINome] = useState("");
+  const [iCpf, setICpf] = useState("");
+  const [iNasc, setINasc] = useState("");
+  const [iContato1, setIContato1] = useState("");
+  const [iContato2, setIContato2] = useState("");
+  const [iEmail, setIEmail] = useState("");
+  const [iEndereco, setIEndereco] = useState("");
+  const [iRef, setIRef] = useState("");
+  const [iVenc, setIVenc] = useState(10);
+  const [iFatura, setIFatura] = useState<"WHATSAPP_EMAIL" | "APP">("WHATSAPP_EMAIL");
+  const [iTaxa, setITaxa] = useState<"DINHEIRO" | "PIX" | "CARTAO">("PIX");
+  const [iWifiNome, setIWifiNome] = useState("");
+  const [iWifiSenha, setIWifiSenha] = useState("");
+  const [iPlano, setIPlano] = useState("ESSENCIAL_100");
+  const [iApps, setIApps] = useState("");
 
   async function loadAgenda() {
     setLoading(true);
     setErr(null);
-
     try {
       const qs = new URLSearchParams({
         inicio,
         fim,
-        cliente: clienteFlag,
+        cliente: "1",
         max_clientes: maxClientes,
       });
-
       const resp = await fetch(`/api/agenda?${qs.toString()}`, { cache: "no-store" });
-      const text = await resp.text();
-      if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`);
-
-      const j = JSON.parse(text) as AgendaResp;
-      setData(j);
+      const t = await resp.text();
+      if (!resp.ok) throw new Error(t || `HTTP ${resp.status}`);
+      setData(JSON.parse(t));
       setLastUpdated(new Date().toLocaleString("pt-BR"));
     } catch (e: any) {
       setData(null);
@@ -218,7 +176,6 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fechar modal com ESC + travar scroll do body
   useEffect(() => {
     function onKeyDown(ev: KeyboardEvent) {
       if (ev.key === "Escape") setSelected(null);
@@ -233,28 +190,37 @@ export default function Page() {
     }
   }, [selected]);
 
-  const flatItems: FlatItem[] = useMemo(() => {
+  // Achata itens do Worker
+  const workerFlat: FlatItem[] = useMemo(() => {
     if (!data) return [];
     const out: FlatItem[] = [];
     for (const dia of data.dias || []) {
       for (const v of Object.keys(dia.porViatura || {})) {
-        for (const it of dia.porViatura[v] || []) {
-          out.push({ ...it, _dia: dia.data, _viatura: v });
-        }
+        for (const it of dia.porViatura[v] || []) out.push({ ...it, _dia: dia.data, _viatura: v });
       }
     }
     return out;
   }, [data]);
 
+  // Achata reservas locais (para aparecer na agenda)
+  const localFlat: FlatItem[] = useMemo(() => {
+    return localReserves.map((it) => ({
+      ...it,
+      _dia: it.data || "—",
+      _viatura: it.responsavel || "—",
+    }));
+  }, [localReserves]);
+
+  const flatItemsAll: FlatItem[] = useMemo(() => {
+    return [...workerFlat, ...localFlat];
+  }, [workerFlat, localFlat]);
+
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
-
-    return flatItems
+    return flatItemsAll
       .filter((it) => (viatura ? it._viatura === viatura : true))
-      .filter((it) => (status ? (it.status || "").toLowerCase().includes(status.toLowerCase()) : true))
       .filter((it) => {
         if (!qq) return true;
-
         const c = it.cliente;
         const blob = [
           it._dia,
@@ -271,348 +237,483 @@ export default function Page() {
           c?.plano,
           c?.observacao,
           clienteEnderecoLinha(c),
-          c?.endereco?.cep,
-          c?.endereco?.ll,
         ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
-
         return blob.includes(qq);
       })
       .sort((a, b) => `${a._dia} ${a.hora || ""}`.localeCompare(`${b._dia} ${b.hora || ""}`));
-  }, [flatItems, viatura, status, q]);
+  }, [flatItemsAll, viatura, q]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, FlatItem[]>();
     for (const it of filtered) {
-      const key = group === "dia" ? it._dia || "Sem data" : it._viatura || "Sem viatura";
+      const key = it._dia || "Sem data";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(it);
     }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filtered, group]);
+  }, [filtered]);
+
+  function addLocalReserve() {
+    const id = makeLocalId();
+    const item: Item = {
+      tipo: "reserva_local",
+      id: `RES-${id}`,
+      status: "Reservado (local)",
+      data: rData,
+      hora: rHora,
+      responsavel: rViatura,
+      usuario: rUsuario,
+      motivo: rMotivo,
+      contrato: rContrato,
+      cliente: {
+        nome: rClienteNome || "—",
+        telefones: rContato ? [rContato] : [],
+        email: "",
+        plano: "",
+        observacao: "",
+        contratoId: rContrato || "",
+        endereco: { logradouro: rEndereco || "—" },
+      },
+      _internal: { local: true, resp: rResp },
+    };
+
+    setLocalReserves((prev) => [item, ...prev]);
+    setTab("agenda");
+  }
+
+  function removeLocalReserve(id: string) {
+    setLocalReserves((prev) => prev.filter((x) => x.id !== id));
+  }
 
   return (
-    <div className="app">
-      <div className="bgGrid" />
-      <div className="bgGlow" />
-
+    <>
       <header className="topbar">
         <div className="container topbarInner">
           <div className="brand">
-            <div className="brandLogo">E</div>
+            <div className="brandLogo">e</div>
             <div>
-              <div className="brandTitle">Agenda Operacional (2)</div>
+              <div className="brandTitle">Agenda Operacional</div>
               <div className="brandSub">Etech • SGP</div>
             </div>
           </div>
 
-          <div className="periodCenter">
-            <div className="periodLabel">Período</div>
-            <div className="chip">
-              {inicio} <span className="muted">→</span> {fim}
-            </div>
-            {data?.meta?.aviso ? <div className="warn">{data.meta.aviso}</div> : null}
-          </div>
+          <nav className="navTabs">
+            <button className={cx("tab", tab === "agenda" && "tabActive")} onClick={() => setTab("agenda")}>
+              Agenda
+            </button>
+            <button className={cx("tab", tab === "reservar" && "tabActive")} onClick={() => setTab("reservar")}>
+              Reservar serviço (visual)
+            </button>
+            <button className={cx("tab", tab === "instalacao" && "tabActive")} onClick={() => setTab("instalacao")}>
+              Nova instalação (ficha)
+            </button>
+          </nav>
 
-          <div className="actionsRight">
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <span className="chip">Período</span>
+            <span className="chip">{inicio} → {fim}</span>
             <button className="btn primary" onClick={loadAgenda} disabled={loading}>
               {loading ? "Carregando..." : "Atualizar"}
             </button>
-            <div className="chip small">Atualizado: {lastUpdated}</div>
           </div>
         </div>
       </header>
 
       <div className="container">
-        <section className="panel filters">
-          <div className="field">
-            <label>Início</label>
-            <input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} />
-          </div>
+        {tab === "agenda" ? (
+          <>
+            <section className="panel filters">
+              <div className="field">
+                <label>Início</label>
+                <input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} />
+              </div>
 
-          <div className="field">
-            <label>Dias</label>
-            <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
-              {[1, 3, 5, 7, 10, 14].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div className="field">
+                <label>Dias</label>
+                <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
+                  {[1, 3, 5, 7, 10, 14].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="field">
-            <label>Viatura</label>
-            <select value={viatura} onChange={(e) => setViatura(e.target.value)}>
-              <option value="">Todas</option>
-              {(data?.viaturas || ["VT01", "VT02", "VT03", "VT04", "VT05"]).map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div className="field">
+                <label>Viatura</label>
+                <select value={viatura} onChange={(e) => setViatura(e.target.value)}>
+                  <option value="">Todas</option>
+                  {(data?.viaturas || ["VT01", "VT02", "VT03", "VT04", "VT05"]).map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="field">
-            <label>Status</label>
-            <select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="">Todos</option>
-              <option value="abert">Aberta</option>
-              <option value="execu">Em execução</option>
-              <option value="pend">Pendente</option>
-              <option value="encerr">Encerrada</option>
-              <option value="reserv">Reservado</option>
-            </select>
-          </div>
+              <div className="field">
+                <label>Max clientes</label>
+                <input value={maxClientes} onChange={(e) => setMaxClientes(e.target.value)} />
+              </div>
 
-          <div className="field">
-            <label>Cliente (enriquecer)</label>
-            <select value={clienteFlag} onChange={(e) => setClienteFlag(e.target.value)}>
-              <option value="1">Sim</option>
-              <option value="0">Não</option>
-            </select>
-          </div>
+              <div className="field grow">
+                <label>Busca</label>
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="cliente, contrato, endereço, motivo..." />
+              </div>
 
-          <div className="field">
-            <label>Max clientes</label>
-            <input value={maxClientes} onChange={(e) => setMaxClientes(e.target.value)} />
-          </div>
+              <div className="field">
+                <label>Atualização</label>
+                <div className="chip">{lastUpdated}</div>
+              </div>
 
-          <div className="field">
-            <label>Agrupar</label>
-            <select value={group} onChange={(e) => setGroup(e.target.value as any)}>
-              <option value="dia">Por dia</option>
-              <option value="viatura">Por viatura</option>
-            </select>
-          </div>
+              <div className="field">
+                <label>Reservas locais</label>
+                <div className="chip">{localReserves.length}</div>
+              </div>
+            </section>
 
-          <div className="field grow">
-            <label>Busca</label>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Cliente, contrato, endereço, plano..."
-            />
-          </div>
-        </section>
-
-        {err ? (
-          <section className="panel error">
-            <div className="errorTitle">Erro</div>
-            <div className="errorMsg">{err}</div>
-          </section>
-        ) : null}
-
-        {data ? (
-          <section className="stats">
-            <div className="stat">
-              <div className="statLabel">OS</div>
-              <div className="statValue">{data.totais?.os ?? 0}</div>
-            </div>
-            <div className="stat">
-              <div className="statLabel">Contratos únicos</div>
-              <div className="statValue">{data.meta?.contratos_unicos_total ?? 0}</div>
-            </div>
-            <div className="stat">
-              <div className="statLabel">Consultados</div>
-              <div className="statValue">{data.meta?.contratos_consultados ?? 0}</div>
-            </div>
-            <div className="stat">
-              <div className="statLabel">Max clientes</div>
-              <div className="statValue">{data.parametros?.max_clientes ?? 0}</div>
-            </div>
-          </section>
-        ) : null}
-
-        <main className="content">
-          <div className={cx("grid", group === "dia" && "gridDays")}>
-            {grouped.map(([key, list]) => (
-              <section key={key} className="col">
-                <div className="colHead">
-                  <div className="colTitle">{key}</div>
-                  <div className="chip">{list.length} itens</div>
-                </div>
-
-                <div className="cards">
-                  {list.map((it) => {
-                    const c = it.cliente;
-                    const endLinha = clienteEnderecoLinha(c);
-
-                    return (
-                      <article
-                        key={`${it.tipo}-${it.id}-${it._viatura}-${it._dia}`}
-                        className={cx("cardCompact", `tone-${statusTone(it.status)}`)}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelected(it)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") setSelected(it);
-                        }}
-                      >
-                        <div className="cardCompactTop">
-                          <div className="cardCompactTime">{fmtHour(it.hora)}</div>
-                          <div className="cardCompactBadges">
-                            <span className="pill">{it._viatura}</span>
-                            <span className="pill ghost">OS {it.id}</span>
-                            <span className="pill ghost">{safeText(it.status)}</span>
-                          </div>
-                        </div>
-
-                        <div className="cardCompactTitle">
-                          <div className="titleMainClamp">{safeText(it.motivo)}</div>
-                          <div className="titleSub">
-                            Cliente: <b>{safeText(c?.nome)}</b>
-                          </div>
-                        </div>
-
-                        <div className="cardCompactBody">
-                          <div className="kvRow">
-                            <span className="k">Contrato</span>
-                            <span className="v">{safeText(it.contrato)}</span>
-                          </div>
-
-                          <div className="kvRow">
-                            <span className="k">Motivo</span>
-                            <span className="v vClamp2">{safeText(it.motivo)}</span>
-                          </div>
-
-                          <div className="kvRow">
-                            <span className="k">Endereço</span>
-                            <span className="v vClamp2">{safeText(endLinha)}</span>
-                          </div>
-
-                          <div className="kvRow">
-                            <span className="k">Usuário</span>
-                            <span className="v">{safeText(it.usuario)}</span>
-                          </div>
-
-                          <div className="kvRow">
-                            <span className="k">Resp.</span>
-                            <span className="v">{safeText(it.responsavel)}</span>
-                          </div>
-                        </div>
-
-                        <div className="cardCompactFooter">
-                          <button className="btnMini" onClick={(e) => { stop(e); setSelected(it); }}>
-                            Ver mais
-                          </button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
+            {err ? (
+              <section
+                className="panel"
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderColor: "rgba(239,68,68,.35)",
+                  background: "rgba(58,13,13,.40)",
+                }}
+              >
+                <div style={{ fontWeight: 950 }}>Erro</div>
+                <div style={{ marginTop: 6, color: "rgba(254,202,202,.95)" }}>{err}</div>
               </section>
-            ))}
-          </div>
-        </main>
+            ) : null}
+
+            <main className="content">
+              <div className="grid">
+                {grouped.map(([dia, itens]) => (
+                  <section className="col" key={dia}>
+                    <div className="colHead">
+                      <div className="colTitle">{dia}</div>
+                      <span className="chip small">{itens.length} itens</span>
+                    </div>
+
+                    <div className="cards">
+                      {itens.map((it) => {
+                        const c = it.cliente;
+                        const endereco = clienteEnderecoLinha(c);
+
+                        return (
+                          <article
+                            key={`${it.id}-${it._dia}-${it._viatura}`}
+                            className={cx("cardCompact", `tone-${statusTone(it.status, it.tipo)}`)}
+                            onClick={() => setSelected(it)}
+                            role="button"
+                            tabIndex={0}
+                          >
+                            <div className="cardCompactTop">
+                              <div className="cardCompactTime">{fmtHour(it.hora)}</div>
+                              <div className="cardCompactBadges">
+                                <span className="pill">{it._viatura}</span>
+                                <span className="pill ghost">
+                                  {it.tipo === "reserva_local" ? "RESERVA (LOCAL)" : `OS ${it.id}`}
+                                </span>
+                                <span className="pill ghost">{safeText(it.status)}</span>
+                              </div>
+                            </div>
+
+                            <div className="titleMainClamp">{safeText(c?.nome)}</div>
+                            <div className="titleSub">{safeText(it.motivo)}</div>
+
+                            <div className="cardCompactBody">
+                              <div className="kvRow">
+                                <span className="k">Contrato</span>
+                                <span className="v">{safeText(it.contrato)}</span>
+                              </div>
+                              <div className="kvRow">
+                                <span className="k">Endereço</span>
+                                <span className="v vClamp2">{safeText(endereco)}</span>
+                              </div>
+                              <div className="kvRow">
+                                <span className="k">Usuário</span>
+                                <span className="v">{safeText(it.usuario)}</span>
+                              </div>
+                              <div className="kvRow">
+                                <span className="k">Resp.</span>
+                                <span className="v">{safeText(it.responsavel)}</span>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </main>
+          </>
+        ) : null}
+
+        {tab === "reservar" ? (
+          <section className="panel" style={{ marginTop: 14, padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 950 }}>Reservar serviço (apenas visual na tela)</div>
+              <div className="chip">Some ao atualizar a página</div>
+            </div>
+
+            <div className="filters">
+              <div className="field">
+                <label>Data</label>
+                <input type="date" value={rData} onChange={(e) => setRData(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Hora</label>
+                <input type="time" value={rHora} onChange={(e) => setRHora(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Viatura</label>
+                <select value={rViatura} onChange={(e) => setRViatura(e.target.value)}>
+                  {["VT01", "VT02", "VT03", "VT04", "VT05"].map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Contrato</label>
+                <input value={rContrato} onChange={(e) => setRContrato(e.target.value)} />
+              </div>
+
+              <div className="field grow">
+                <label>Motivo</label>
+                <input value={rMotivo} onChange={(e) => setRMotivo(e.target.value)} />
+              </div>
+
+              <div className="field">
+                <label>Usuário</label>
+                <input value={rUsuario} onChange={(e) => setRUsuario(e.target.value)} />
+              </div>
+
+              <div className="field">
+                <label>Resp.</label>
+                <input value={rResp} onChange={(e) => setRResp(e.target.value)} />
+              </div>
+
+              <div className="field grow">
+                <label>Nome do cliente</label>
+                <input value={rClienteNome} onChange={(e) => setRClienteNome(e.target.value)} />
+              </div>
+
+              <div className="field grow">
+                <label>Endereço (cliente)</label>
+                <input value={rEndereco} onChange={(e) => setREndereco(e.target.value)} />
+              </div>
+
+              <div className="field">
+                <label>Contato</label>
+                <input value={rContato} onChange={(e) => setRContato(e.target.value)} />
+              </div>
+
+              <div className="field">
+                <label>&nbsp;</label>
+                <button className="btn primary" onClick={addLocalReserve}>
+                  Reservar na tela
+                </button>
+              </div>
+            </div>
+
+            <div className="hr" />
+
+            <div style={{ fontWeight: 950, marginBottom: 10 }}>Reservas locais (remover)</div>
+            {localReserves.length === 0 ? (
+              <div className="chip">Nenhuma reserva local criada.</div>
+            ) : (
+              <div className="grid">
+                {localReserves.map((it) => (
+                  <section key={it.id} className="panel" style={{ padding: 12 }}>
+                    <div className="kvRow"><span className="k">Quando</span><span className="v">{it.data} {it.hora}</span></div>
+                    <div className="kvRow"><span className="k">Viatura</span><span className="v">{it.responsavel}</span></div>
+                    <div className="kvRow"><span className="k">Contrato</span><span className="v">{it.contrato}</span></div>
+                    <div className="kvRow"><span className="k">Cliente</span><span className="v">{it.cliente?.nome}</span></div>
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                      <button className="btn" onClick={() => removeLocalReserve(it.id)}>Remover</button>
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {tab === "instalacao" ? (
+          <section className="panel" style={{ marginTop: 14, padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 950 }}>Ficha de instalação (apenas visual)</div>
+              <div className="chip">Não salva — só para preencher e revisar</div>
+            </div>
+
+            <div className="filters">
+              <div className="field grow">
+                <label>Nome Completo</label>
+                <input value={iNome} onChange={(e) => setINome(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>CPF</label>
+                <input value={iCpf} onChange={(e) => setICpf(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Nascimento</label>
+                <input type="date" value={iNasc} onChange={(e) => setINasc(e.target.value)} />
+              </div>
+
+              <div className="field grow">
+                <label>Contato 1</label>
+                <input value={iContato1} onChange={(e) => setIContato1(e.target.value)} />
+              </div>
+              <div className="field grow">
+                <label>Contato 2</label>
+                <input value={iContato2} onChange={(e) => setIContato2(e.target.value)} />
+              </div>
+              <div className="field grow">
+                <label>E-mail</label>
+                <input value={iEmail} onChange={(e) => setIEmail(e.target.value)} />
+              </div>
+
+              <div className="field grow">
+                <label>Endereço completo</label>
+                <input value={iEndereco} onChange={(e) => setIEndereco(e.target.value)} />
+              </div>
+              <div className="field grow">
+                <label>Ponto de referência</label>
+                <input value={iRef} onChange={(e) => setIRef(e.target.value)} />
+              </div>
+
+              <div className="field">
+                <label>Vencimento</label>
+                <select value={iVenc} onChange={(e) => setIVenc(Number(e.target.value))}>
+                  <option value={10}>Dia 10</option>
+                  <option value={20}>Dia 20</option>
+                  <option value={30}>Dia 30</option>
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Fatura</label>
+                <select value={iFatura} onChange={(e) => setIFatura(e.target.value as any)}>
+                  <option value="WHATSAPP_EMAIL">WhatsApp/E-mail</option>
+                  <option value="APP">Central do Cliente (App)</option>
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Taxa Instalação</label>
+                <select value={iTaxa} onChange={(e) => setITaxa(e.target.value as any)}>
+                  <option value="DINHEIRO">Dinheiro</option>
+                  <option value="PIX">PIX</option>
+                  <option value="CARTAO">Cartão</option>
+                </select>
+              </div>
+
+              <div className="field grow">
+                <label>Wi-Fi Nome</label>
+                <input value={iWifiNome} onChange={(e) => setIWifiNome(e.target.value)} />
+              </div>
+              <div className="field grow">
+                <label>Wi-Fi Senha (mín 8)</label>
+                <input value={iWifiSenha} onChange={(e) => setIWifiSenha(e.target.value)} />
+              </div>
+
+              <div className="field grow">
+                <label>Plano</label>
+                <select value={iPlano} onChange={(e) => setIPlano(e.target.value)}>
+                  <option value="ESSENCIAL_100">Essencial 100</option>
+                  <option value="MINI_PLUS_300">Mini Plus 300</option>
+                  <option value="PLUS_300">Plus 300</option>
+                  <option value="ULTRA_500">Ultra 500</option>
+                  <option value="PREMIUM_500">Premium 500</option>
+                  <option value="MAX_700">Max 700</option>
+                </select>
+              </div>
+
+              <div className="field grow">
+                <label>Apps / Preferências</label>
+                <textarea value={iApps} onChange={(e) => setIApps(e.target.value)} placeholder="Ex.: Advanced, Premium, Kaspersky..." />
+              </div>
+            </div>
+
+            <div className="hr" />
+
+            <div style={{ fontWeight: 950, marginBottom: 10 }}>Prévia da ficha</div>
+            <section className="panel" style={{ padding: 12, background: "rgba(6,10,18,.35)" }}>
+              <div className="kvRow"><span className="k">Cliente</span><span className="v">{safeText(iNome)}</span></div>
+              <div className="kvRow"><span className="k">CPF</span><span className="v">{safeText(iCpf)}</span></div>
+              <div className="kvRow"><span className="k">Contato</span><span className="v">{safeText(iContato1)} {iContato2 ? ` / ${iContato2}` : ""}</span></div>
+              <div className="kvRow"><span className="k">E-mail</span><span className="v">{safeText(iEmail)}</span></div>
+              <div className="kvRow"><span className="k">Endereço</span><span className="v vClamp2">{safeText(iEndereco)}</span></div>
+              <div className="kvRow"><span className="k">Ref.</span><span className="v vClamp2">{safeText(iRef)}</span></div>
+              <div className="kvRow"><span className="k">Venc.</span><span className="v">Dia {iVenc}</span></div>
+              <div className="kvRow"><span className="k">Fatura</span><span className="v">{iFatura}</span></div>
+              <div className="kvRow"><span className="k">Taxa</span><span className="v">{iTaxa}</span></div>
+              <div className="kvRow"><span className="k">Wi-Fi</span><span className="v">{safeText(iWifiNome)}</span></div>
+              <div className="kvRow"><span className="k">Plano</span><span className="v">{iPlano}</span></div>
+              <div className="kvRow"><span className="k">Apps</span><span className="v vClamp2">{safeText(iApps)}</span></div>
+            </section>
+          </section>
+        ) : null}
 
         <footer className="footer">
           <div className="muted small">Desenvolvido por Paulo Sales.</div>
         </footer>
       </div>
 
-      {/* MODAL */}
+      {/* MODAL DETALHES */}
       {selected ? (
         <div className="overlay" onMouseDown={() => setSelected(null)}>
           <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
             <div className="modalHead">
-              <div className="modalTitle">
+              <div>
                 <div className="modalTitleMain">
-                  OS {safeText(selected.id)} • {safeText(selected.status)}
+                  {selected.tipo === "reserva_local" ? "Reserva (local)" : "Ordem de Serviço"} •{" "}
+                  {selected._viatura} • {selected._dia} {fmtHour(selected.hora)}
                 </div>
                 <div className="modalTitleSub">
-                  {safeText(selected._dia)} • {safeText(selected._viatura)} • {safeText(selected.hora)}
+                  {safeText(selected.motivo)} • {safeText(selected.status)}
                 </div>
               </div>
-
-              <button className="iconBtn" onClick={() => setSelected(null)} aria-label="Fechar">
-                ✕
+              <button className="iconBtn" onClick={() => setSelected(null)}>
+                X
               </button>
             </div>
 
             <div className="modalBody">
               <div className="modalGrid">
                 <section className="modalBlock">
-                  <div className="modalBlockTitle">Ordem de Serviço</div>
-
-                  <div className="kvRow">
-                    <span className="k">Contrato</span>
-                    <span className="v">{safeText(selected.contrato)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Motivo</span>
-                    <span className="v vClamp3">{safeText(selected.motivo)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Usuário</span>
-                    <span className="v">{safeText(selected.usuario)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Responsável</span>
-                    <span className="v">{safeText(selected.responsavel)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Status</span>
-                    <span className="v">{safeText(selected.status)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Contrato status</span>
-                    <span className="v">{safeText(selected.contrato_status)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Início</span>
-                    <span className="v">{safeText(selected.inicioISO)}</span>
-                  </div>
+                  <div className="modalBlockTitle">Serviço</div>
+                  <div className="kvRow"><span className="k">Tipo</span><span className="v">{safeText(selected.tipo)}</span></div>
+                  <div className="kvRow"><span className="k">ID</span><span className="v">{safeText(selected.id)}</span></div>
+                  <div className="kvRow"><span className="k">Contrato</span><span className="v">{safeText(selected.contrato)}</span></div>
+                  <div className="kvRow"><span className="k">Motivo</span><span className="v vClamp2">{safeText(selected.motivo)}</span></div>
+                  <div className="kvRow"><span className="k">Usuário</span><span className="v">{safeText(selected.usuario)}</span></div>
+                  <div className="kvRow"><span className="k">Resp.</span><span className="v">{safeText(selected.responsavel)}</span></div>
                 </section>
 
                 <section className="modalBlock">
                   <div className="modalBlockTitle">Cliente</div>
-
-                  <div className="kvRow">
-                    <span className="k">Nome</span>
-                    <span className="v vClamp2">{safeText(selected.cliente?.nome)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Contato</span>
-                    <span className="v vClamp2">{safeText(phonesLinha(selected.cliente))}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Email</span>
-                    <span className="v vClamp2">{safeText(selected.cliente?.email)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Plano</span>
-                    <span className="v vClamp2">{safeText(selected.cliente?.plano)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Endereço</span>
-                    <span className="v vClamp3">{safeText(clienteEnderecoLinha(selected.cliente))}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">CEP</span>
-                    <span className="v">{safeText(selected.cliente?.endereco?.cep)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">LL</span>
-                    <span className="v vClamp2">{safeText(selected.cliente?.endereco?.ll)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Obs.</span>
-                    <span className="v vClamp3">{safeText(selected.cliente?.observacao)}</span>
-                  </div>
+                  <div className="kvRow"><span className="k">Nome</span><span className="v vClamp2">{safeText(selected.cliente?.nome)}</span></div>
+                  <div className="kvRow"><span className="k">Contato</span><span className="v">{safeText(phonesLinha(selected.cliente))}</span></div>
+                  <div className="kvRow"><span className="k">Email</span><span className="v">{safeText(selected.cliente?.email)}</span></div>
+                  <div className="kvRow"><span className="k">Plano</span><span className="v vClamp2">{safeText(selected.cliente?.plano)}</span></div>
+                  <div className="kvRow"><span className="k">Endereço</span><span className="v vClamp2">{safeText(clienteEnderecoLinha(selected.cliente))}</span></div>
                 </section>
               </div>
             </div>
 
             <div className="modalFoot">
               <div className="chip small">ESC para fechar</div>
-              <button className="btn" onClick={() => setSelected(null)}>Fechar</button>
+              <button className="btn" onClick={() => setSelected(null)}>
+                Fechar
+              </button>
             </div>
           </div>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
