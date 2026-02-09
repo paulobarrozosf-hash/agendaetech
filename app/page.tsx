@@ -864,18 +864,18 @@ export default function HomePage() {
               </div>
               <div className="field">
                 <label>Viatura</label>
-                <select value={viatura} onChange={(e) => setViatura(e.target.value)}>
-                  <option value="">Todas</option>
-                  {data?.viaturas.map((v) => (
-                    <option key={v} value={v}>{v}</option>
+                <select value={rViatura} onChange={(e) => setRViatura(e.target.value)}>
+                  {data?.viaturas.map(v => (
+                    <option key={v} value={v ?? ''}>{v}</option>
                   ))}
-                  {/* Adicionar viaturas de reservas locais se não estiverem na lista do SGP */}
-                  {Array.from(new Set(localReserves.map(r => r.responsavel).filter(Boolean)))
+                  {localReserves
+                    .map(r => r.responsavel)
                     .filter(v => !data?.viaturas.includes(v!))
                     .map(v => (
-                      <option key={v} value={v ?? ''}>{v} (Local)</option>  // ✅ CORRIGIDO
+                      <option key={v ?? ''} value={v ?? ''}>{v} (Local)</option>  // ✅ SOLUÇÃO
                     ))}
                 </select>
+
               </div>
               <div className="field">
                 <label>Max Clientes</label>
