@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
 // --- Tipos de dados (para o SGP e para o local) ---
@@ -26,17 +25,17 @@ type ClienteObj = {
 };
 
 type Item = {
-  tipo: string;
+  tipo: string; // os | reserva_local
   id: string;
   contrato?: string | null;
   status?: string | null;
-  data?: string | null;
-  hora?: string | null;
+  data?: string | null; // YYYY-MM-DD
+  hora?: string | null; // HH:mm
   motivo?: string | null;
-  responsavel?: string | null;
+  responsavel?: string | null; // VT01...
   usuario?: string | null;
   cliente?: ClienteObj | null;
-  _internal?: any;
+  _internal?: any; // Para dados internos como reservationId
 };
 
 type Dia = { data: string; porViatura: Record<string, Item[]> };
@@ -51,6 +50,7 @@ type FlatItem = Item & { _dia: string; _viatura: string };
 
 type TabKey = "agenda" | "reservar" | "instalacao";
 
+// --- Tipos para a Ficha de Instalação (localStorage) ---
 type InstallStatus = "CRIADO" | "AGENDADO" | "CADASTRADO_SGP" | "FINALIZADO" | "CANCELADO";
 type BillingDelivery = "WHATSAPP_EMAIL" | "APP";
 type InstallFeePayment = "DINHEIRO" | "PIX" | "CARTAO";
@@ -76,23 +76,24 @@ type InstallationData = {
   planoNome: string;
   planoMbps?: number | null;
   planoValor?: number | null;
-  appsEscolhidos: { category: string; apps: string[] }[];
+  appsEscolhidos: { category: string; apps: string[] }[]; // Lista de apps estruturada
   criadoPor?: string | null;
   notasInternas?: string | null;
-  reservaId?: string | null;
+  reservaId?: string | null; // Link para a reserva local
 };
 
+// --- Estrutura para os planos e suas opções de apps ---
 type AppCategory = "STANDARD" | "ADVANCED" | "TOP" | "PREMIUM";
 
 type PlanAppChoice = {
   category: AppCategory;
-  count: number;
-  options: string[];
+  count: number; // Quantos apps podem ser escolhidos desta categoria
+  options: string[]; // Lista de apps disponíveis nesta categoria
 };
 
 type PlanOption = {
-  id: string;
-  name: string;
+  id: string; // Ex: "A", "B", "UNICA"
+  name: string; // Ex: "Opção A", "Formato Único"
   choices: PlanAppChoice[];
 };
 
@@ -100,10 +101,11 @@ type Plan = {
   codigo: string;
   nome: string;
   mbps: number;
-  valor: number;
+  valor: number; // em centavos
   options: PlanOption[];
 };
 
+// --- Dados dos Planos (detalhado conforme sua especificação) ---
 const PLANOS: Plan[] = [
   {
     codigo: "ESSENCIAL_100",
@@ -361,6 +363,7 @@ const PLANOS: Plan[] = [
   }
 ];
 
+// --- Motivos de Reserva ---
 const RESERVA_MOTIVOS = [
   "Instalação",
   "Mudança de Endereço",
@@ -369,6 +372,7 @@ const RESERVA_MOTIVOS = [
   "Recolhimento",
 ];
 
+// --- Funções utilitárias ---
 function hojeISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -381,7 +385,7 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 function statusTone(status?: string | null, tipo?: string) {
-  if (tipo === "reserva_local") return "gold";
+  if (tipo === "reserva_local") return "gold"; // Reservas locais sempre gold
   const s = (status || "").toLowerCase();
   if (s.includes("reserv")) return "gold";
   if (s.includes("abert")) return "green";
@@ -414,7 +418,9 @@ function phonesLinha(c?: ClienteObj | null) {
   return t.length ? t.join(" / ") : null;
 }
 
+// --- Componente principal da página ---
 export default function HomePage() {
+  // --- Estado da Agenda ---
   const [tab, setTab] = useState<TabKey>("agenda");
   const [data, setData] = useState<AgendaResp | null>(null);
   const [loading, setLoading] = useState(false);
@@ -426,23 +432,26 @@ export default function HomePage() {
   const fim = useMemo(() => addDays(inicio, dias - 1), [inicio, dias]);
 
   const [viatura, setViatura] = useState("");
-  const [qAgenda, setQAgenda] = useState("");
+  const [maxClientes, setMaxClientes] = useState("200");
+  const [qAgenda, setQAgenda] = useState(""); // Campo de busca para a agenda
 
-  const [selectedAgendaItem, setSelectedAgendaItem] = useState<FlatItem | null>(null);
-  const [selectedInstallation, setSelectedInstallation] = useState<InstallationData | null>(null);
+  const [selectedAgendaItem, setSelectedAgendaItem] = useState<FlatItem | null>(null); // Para modal da agenda
 
+  // --- Estado das Reservas Locais (localStorage) ---
+  const [localReserves, setLocalReserves] = useState<Item[]>([]);
   const [rData, setRData] = useState(hojeISO());
   const [rHora, setRHora] = useState("08:00");
   const [rViatura, setRViatura] = useState("VT01");
   const [rContrato, setRContrato] = useState("");
   const [rMotivo, setRMotivo] = useState(RESERVA_MOTIVOS[0]);
   const [rUsuario, setRUsuario] = useState("");
+  const [rResp, setRResp] = useState("VT01");
   const [rClienteNome, setRClienteNome] = useState("");
   const [rEndereco, setREndereco] = useState("");
   const [rContato, setRContato] = useState("");
 
-  const [localReserves, setLocalReserves] = useState<Item[]>([]);
-
+  // --- Estado das Instalações Locais (localStorage) ---
+  const [localInstallations, setLocalInstallations] = useState<InstallationData[]>([]);
   const [iNome, setINome] = useState("");
   const [iCpf, setICpf] = useState("");
   const [iNasc, setINasc] = useState("");
@@ -453,87 +462,61 @@ export default function HomePage() {
   const [iRef, setIRef] = useState("");
   const [iVenc, setIVenc] = useState<10 | 20 | 30>(10);
   const [iFatura, setIFatura] = useState<BillingDelivery>("WHATSAPP_EMAIL");
-  const [iTaxa, setITaxa] = useState<InstallFeePayment>("DINHEIRO");
+  const [iTaxa, setITaxa] = useState<InstallFeePayment>("PIX");
   const [iWifiNome, setIWifiNome] = useState("");
   const [iWifiSenha, setIWifiSenha] = useState("");
-  const [iPlano, setIPlano] = useState(PLANOS[0].codigo);
-  const [iOpcao, setIOpcao] = useState("");
+  const [iPlanoCodigo, setIPlanoCodigo] = useState(PLANOS[0].codigo);
+  const [iPlanoOptionId, setIPlanoOptionId] = useState(PLANOS[0].options[0].id);
   const [iAppsSelecionados, setIAppsSelecionados] = useState<string[]>([]);
-  const [iCriadoPor, setICriadoPor] = useState("");
-  const [iNotas, setINotas] = useState("");
+  const [qInstallations, setQInstallations] = useState(""); // Campo de busca para instalações
 
-  const [localInstallations, setLocalInstallations] = useState<InstallationData[]>([]);
-  const [qInstallations, setQInstallations] = useState("");
+  const [selectedInstallation, setSelectedInstallation] = useState<InstallationData | null>(null); // Para modal da instalação
 
+  // --- Lógica de seleção de plano e opções ---
+  const selectedPlan = useMemo(() => {
+    return PLANOS.find((p) => p.codigo === iPlanoCodigo) || PLANOS[0];
+  }, [iPlanoCodigo]);
+
+  const selectedPlanOption = useMemo(() => {
+    return selectedPlan.options.find((opt) => opt.id === iPlanoOptionId) || selectedPlan.options[0];
+  }, [selectedPlan, iPlanoOptionId]);
+
+  // --- Funções de manipulação de localStorage ---
   useEffect(() => {
-    const stored = localStorage.getItem("localReserves");
-    if (stored) {
-      try {
-        setLocalReserves(JSON.parse(stored));
-      } catch {}
-    }
-  }, []);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("localInstallations");
-    if (stored) {
-      try {
-        setLocalInstallations(JSON.parse(stored));
-      } catch {}
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [inicio, dias]);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setSelectedAgendaItem(null);
-        setSelectedInstallation(null);
+    if (typeof window !== "undefined") {
+      const storedReserves = localStorage.getItem("localReserves");
+      if (storedReserves) {
+        setLocalReserves(JSON.parse(storedReserves));
       }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+      const storedInstallations = localStorage.getItem("localInstallations");
+      if (storedInstallations) {
+        setLocalInstallations(JSON.parse(storedInstallations));
+      }
+    }
   }, []);
 
-  async function loadData() {
-    setLoading(true);
-    setErr(null);
-    try {
-      const qs = new URLSearchParams();
-      qs.append("inicio", inicio);
-      qs.append("fim", fim);
-      qs.append("cliente", "1");
-
-      const resp = await fetch(`/api/agenda?${qs.toString()}`);
-      if (!resp.ok) {
-        let errorMsg = `HTTP ${resp.status}`;
-        try {
-          const errJson = await resp.json();
-          if (errJson.error) {
-            errorMsg = errJson.error;
-            if (errJson.details) errorMsg += ` (${errJson.details})`;
-          }
-        } catch {}
-        throw new Error(errorMsg);
-      }
-
-      const json: AgendaResp = await resp.json();
-      setData(json);
-      setLastUpdated(new Date().toLocaleTimeString("pt-BR"));
-    } catch (e: any) {
-      setErr(e.message || String(e));
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("localReserves", JSON.stringify(localReserves));
     }
-  }
+  }, [localReserves]);
 
-  function addLocalReserve() {
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("localInstallations", JSON.stringify(localInstallations));
+    }
+  }, [localInstallations]);
+
+  // --- Funções para Reservas Locais ---
+  const addLocalReserve = () => {
+    if (!rData || !rHora || !rViatura || !rMotivo || !rClienteNome || !rEndereco || !rContato) {
+      alert("Por favor, preencha todos os campos obrigatórios da reserva.");
+      return;
+    }
+
     const newReserve: Item = {
       tipo: "reserva_local",
-      id: `local-${Date.now()}`,
+      id: `LOCAL-${Date.now()}`,
       contrato: rContrato || null,
       status: "Reservado",
       data: rData,
@@ -542,51 +525,76 @@ export default function HomePage() {
       responsavel: rViatura,
       usuario: rUsuario || null,
       cliente: {
-        nome: rClienteNome || null,
-        telefones: rContato ? [rContato] : null,
-        email: null,
-        plano: null,
-        observacao: null,
-        contratoId: null,
-        endereco: {
-          logradouro: rEndereco || null,
-          numero: null,
-          complemento: null,
-          bairro: null,
-          cidade: null,
-          uf: null,
-          cep: null,
-          ll: null,
-        },
+        nome: rClienteNome,
+        telefones: rContato ? [rContato] : [],
+        endereco: { logradouro: rEndereco },
       },
-      _internal: { reservationId: `local-${Date.now()}` },
+      _internal: {
+        // Dados adicionais para o modal, se necessário
+      },
     };
-
-    const updated = [...localReserves, newReserve];
-    setLocalReserves(updated);
-    localStorage.setItem("localReserves", JSON.stringify(updated));
-
+    setLocalReserves((prev) => [...prev, newReserve]);
+    alert("Reserva salva no navegador e adicionada à agenda!");
+    // Limpar formulário
+    setRData(hojeISO());
+    setRHora("08:00");
+    setRViatura("VT01");
     setRContrato("");
+    setRMotivo(RESERVA_MOTIVOS[0]);
     setRUsuario("");
+    setRResp("VT01");
     setRClienteNome("");
     setREndereco("");
     setRContato("");
-  }
+  };
 
-  function removeLocalReserve(id: string) {
-    const updated = localReserves.filter((r) => r.id !== id);
-    setLocalReserves(updated);
-    localStorage.setItem("localReserves", JSON.stringify(updated));
-  }
+  const removeLocalReserve = (id: string) => {
+    if (confirm("Tem certeza que deseja remover esta reserva local?")) {
+      setLocalReserves((prev) => prev.filter((r) => r.id !== id));
+    }
+  };
 
-  function addLocalInstallation() {
-    const plano = PLANOS.find((p) => p.codigo === iPlano);
-    if (!plano) return;
+  // --- Funções para Instalações Locais ---
+  const handleAppToggle = (app: string, category: AppCategory, maxCount: number) => {
+    setIAppsSelecionados((prev) => {
+      const appsInCategory = selectedPlanOption.choices
+        .find(c => c.category === category)?.options || [];
 
-    const newInstall: InstallationData = {
-      id: `install-${Date.now()}`,
+      const currentSelectedInCategory = prev.filter(a => appsInCategory.includes(a));
+
+      if (prev.includes(app)) {
+        return prev.filter((a) => a !== app);
+      } else {
+        if (currentSelectedInCategory.length < maxCount) {
+          return [...prev, app];
+        } else {
+          alert(`Você pode escolher no máximo ${maxCount} app(s) da categoria ${category}.`);
+          return prev;
+        }
+      }
+    });
+  };
+
+  const addLocalInstallation = () => {
+    if (!iNome || !iCpf || !iContato1 || !iEndereco || !iWifiNome || !iWifiSenha || iWifiSenha.length < 8) {
+      alert("Por favor, preencha todos os campos obrigatórios da ficha de instalação e verifique a senha do Wi-Fi (mínimo 8 dígitos).");
+      return;
+    }
+
+    // Validação de quantidade de apps selecionados por categoria
+    for (const choice of selectedPlanOption.choices) {
+      const appsInCategory = choice.options;
+      const selectedCount = iAppsSelecionados.filter(a => appsInCategory.includes(a)).length;
+      if (selectedCount !== choice.count) {
+        alert(`Para o plano ${selectedPlan.nome} (${selectedPlanOption.name}), você deve escolher exatamente ${choice.count} app(s) da categoria ${choice.category}. Atualmente você selecionou ${selectedCount}.`);
+        return;
+      }
+    }
+
+    const newInstallation: InstallationData = {
+      id: `INST-${Date.now()}`,
       createdAt: new Date().toISOString(),
-      status: "CRIADO",
+      status: "CRIADO", // Ou "AGENDADO" se linkar com reserva
       nomeCompleto: iNome,
       cpf: iCpf,
       nascimento: iNasc || null,
@@ -600,20 +608,21 @@ export default function HomePage() {
       taxaPagamento: iTaxa,
       wifiNome: iWifiNome,
       wifiSenha: iWifiSenha,
-      planoCodigo: plano.codigo,
-      planoNome: plano.nome,
-      planoMbps: plano.mbps,
-      planoValor: plano.valor,
-      appsEscolhidos: buildAppsEscolhidos(),
-      criadoPor: iCriadoPor || null,
-      notasInternas: iNotas || null,
-      reservaId: null,
+      planoCodigo: selectedPlan.codigo,
+      planoNome: selectedPlan.nome,
+      planoMbps: selectedPlan.mbps,
+      planoValor: selectedPlan.valor,
+      appsEscolhidos: selectedPlanOption.choices.map(choice => ({
+        category: choice.category,
+        apps: iAppsSelecionados.filter(app => choice.options.includes(app))
+      })),
+      criadoPor: null, // Pode adicionar um campo para isso no futuro
+      notasInternas: null,
+      reservaId: null, // Pode linkar com reserva no futuro
     };
-
-    const updated = [...localInstallations, newInstall];
-    setLocalInstallations(updated);
-    localStorage.setItem("localInstallations", JSON.stringify(updated));
-
+    setLocalInstallations((prev) => [...prev, newInstallation]);
+    alert("Ficha de instalação salva no navegador!");
+    // Limpar formulário
     setINome("");
     setICpf("");
     setINasc("");
@@ -624,250 +633,356 @@ export default function HomePage() {
     setIRef("");
     setIVenc(10);
     setIFatura("WHATSAPP_EMAIL");
-    setITaxa("DINHEIRO");
+    setITaxa("PIX");
     setIWifiNome("");
     setIWifiSenha("");
-    setIPlano(PLANOS[0].codigo);
-    setIOpcao("");
+    setIPlanoCodigo(PLANOS[0].codigo);
+    setIPlanoOptionId(PLANOS[0].options[0].id);
     setIAppsSelecionados([]);
-    setICriadoPor("");
-    setINotas("");
-  }
+  };
 
-  function buildAppsEscolhidos() {
-    const plano = PLANOS.find((p) => p.codigo === iPlano);
-    if (!plano) return [];
-
-    const opcao = plano.options.find((o) => o.id === iOpcao);
-    if (!opcao) return [];
-
-    return opcao.choices.map((choice) => ({
-      category: choice.category,
-      apps: iAppsSelecionados.filter((app) => choice.options.includes(app)),
-    }));
-  }
-
-  function removeLocalInstallation(id: string) {
-    const updated = localInstallations.filter((inst) => inst.id !== id);
-    setLocalInstallations(updated);
-    localStorage.setItem("localInstallations", JSON.stringify(updated));
-  }
-
-  function handleAppToggle(app: string, category: AppCategory, maxCount: number) {
-    const plano = PLANOS.find((p) => p.codigo === iPlano);
-    if (!plano) return;
-
-    const opcao = plano.options.find((o) => o.id === iOpcao);
-    if (!opcao) return;
-
-    const choice = opcao.choices.find((c) => c.category === category);
-    if (!choice) return;
-
-    const currentCategoryApps = iAppsSelecionados.filter((a) => choice.options.includes(a));
-
-    if (iAppsSelecionados.includes(app)) {
-      setIAppsSelecionados(iAppsSelecionados.filter((a) => a !== app));
-    } else {
-      if (currentCategoryApps.length < maxCount) {
-        setIAppsSelecionados([...iAppsSelecionados, app]);
-      }
+  const removeLocalInstallation = (id: string) => {
+    if (confirm("Tem certeza que deseja remover esta ficha de instalação local?")) {
+      setLocalInstallations((prev) => prev.filter((inst) => inst.id !== id));
     }
-  }
+  };
 
-  const viaturas = useMemo(() => data?.viaturas || [], [data]);
+  // --- Carregar dados da Agenda ---
+  const loadData = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const qs = new URLSearchParams({
+        inicio,
+        fim,
+        max_clientes: maxClientes,
+      });
+      const r = await fetch(`/api/agenda?${qs.toString()}`, { cache: "no-store" });
+      const t = await r.text();
+      if (!r.ok) throw new Error(t);
+      const j: AgendaResp = JSON.parse(t);
 
-  const flatItems = useMemo(() => {
-    if (!data) return [];
-    const arr: FlatItem[] = [];
-    for (const dia of data.dias) {
-      for (const vt of viaturas) {
-        const items = dia.porViatura[vt] || [];
-        for (const it of items) {
-          arr.push({ ...it, _dia: dia.data, _viatura: vt });
+      // Mesclar reservas locais
+      const allItems: FlatItem[] = [];
+      (j.dias || []).forEach((dia) => {
+        Object.entries(dia.porViatura).forEach(([viatura, items]) => {
+          items.forEach((item) => {
+            allItems.push({ ...item, _dia: dia.data, _viatura: viatura });
+          });
+        });
+      });
+
+      // Adicionar reservas locais que caem no período
+      localReserves.forEach((reserva) => {
+        if (reserva.data && reserva.data >= inicio && reserva.data <= fim) {
+          allItems.push({
+            ...reserva,
+            _dia: reserva.data,
+            _viatura: reserva.responsavel || "N/A",
+          } as FlatItem);
         }
-      }
-    }
+      });
 
-    for (const r of localReserves) {
-      if (r.data && r.data >= inicio && r.data <= fim) {
-        arr.push({ ...r, _dia: r.data, _viatura: r.responsavel || "VT01" });
-      }
-    }
+      // Reagrupar para o formato da agenda
+      const newDiasMap = new Map<string, Dia>();
+      allItems.sort((a, b) => {
+        const dateA = `${a._dia} ${a.hora}`;
+        const dateB = `${b._dia} ${b.hora}`;
+        return dateA.localeCompare(dateB);
+      });
 
-    arr.sort((a, b) => {
-      const cmpData = (a._dia || "").localeCompare(b._dia || "");
-      if (cmpData !== 0) return cmpData;
-      const cmpHora = (a.hora || "").localeCompare(b.hora || "");
-      if (cmpHora !== 0) return cmpHora;
-      if (a.tipo === "reserva_local" && b.tipo !== "reserva_local") return -1;
-      if (a.tipo !== "reserva_local" && b.tipo === "reserva_local") return 1;
-      return 0;
+      allItems.forEach((item) => {
+        if (!newDiasMap.has(item._dia)) {
+          newDiasMap.set(item._dia, { data: item._dia, porViatura: {} });
+        }
+        const diaObj = newDiasMap.get(item._dia)!;
+        if (!diaObj.porViatura[item._viatura]) {
+          diaObj.porViatura[item._viatura] = [];
+        }
+        diaObj.porViatura[item._viatura].push(item);
+      });
+
+      const sortedDias = Array.from(newDiasMap.values()).sort((a, b) =>
+        a.data.localeCompare(b.data)
+      );
+
+      setData({ ...j, dias: sortedDias });
+      setLastUpdated(new Date().toLocaleString("pt-BR"));
+    } catch (e: any) {
+      setErr(e?.message || "Erro ao carregar agenda.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inicio, dias, maxClientes, localReserves]); // Recarrega se mudar período ou reservas locais
+
+  // --- Lógica de filtragem da Agenda ---
+  const flatItemsAll = useMemo(() => {
+    const items: FlatItem[] = [];
+    data?.dias.forEach((dia) => {
+      Object.entries(dia.porViatura).forEach(([viaturaKey, viaturaItems]) => {
+        viaturaItems.forEach((item) => {
+          items.push({ ...item, _dia: dia.data, _viatura: viaturaKey });
+        });
+      });
     });
+    return items;
+  }, [data]);
 
-    return arr;
-  }, [data, viaturas, localReserves, inicio, fim]);
+  const filteredAgendaItems = useMemo(() => {
+    let items = flatItemsAll;
 
-  const filteredItems = useMemo(() => {
-    let arr = flatItems;
-    if (viatura) {
-      arr = arr.filter((it) => it._viatura === viatura);
+    // Filtro por viatura
+    if (viatura && viatura !== "Todas") {
+      items = items.filter((item) => item._viatura === viatura);
     }
+
+    // Filtro por busca (cliente, contrato, endereço, plano)
     if (qAgenda) {
-      const q = qAgenda.toLowerCase();
-      arr = arr.filter((it) => {
-        const nome = (it.cliente?.nome || "").toLowerCase();
-        const motivo = (it.motivo || "").toLowerCase();
-        const status = (it.status || "").toLowerCase();
-        const contrato = (it.contrato || "").toLowerCase();
-        return nome.includes(q) || motivo.includes(q) || status.includes(q) || contrato.includes(q);
+      const query = qAgenda.toLowerCase();
+      items = items.filter((item) => {
+        const clienteNome = item.cliente?.nome?.toLowerCase() || "";
+        const contrato = item.contrato?.toLowerCase() || "";
+        const endereco = clienteEnderecoLinha(item.cliente)?.toLowerCase() || "";
+        const plano = item.cliente?.plano?.toLowerCase() || "";
+        const motivo = item.motivo?.toLowerCase() || "";
+
+        return (
+          clienteNome.includes(query) ||
+          contrato.includes(query) ||
+          endereco.includes(query) ||
+          plano.includes(query) ||
+          motivo.includes(query)
+        );
       });
     }
-    return arr;
-  }, [flatItems, viatura, qAgenda]);
 
-  const groupedByDay = useMemo(() => {
-    const map: Record<string, Record<string, FlatItem[]>> = {};
-    for (const it of filteredItems) {
-      const d = it._dia;
-      const v = it._viatura;
-      if (!map[d]) map[d] = {};
-      if (!map[d][v]) map[d][v] = [];
-      map[d][v].push(it);
-    }
-    return map;
-  }, [filteredItems]);
+    // Reagrupar por dia e viatura para exibição
+    const groupedByDayAndViatura = new Map<string, Map<string, FlatItem[]>>();
+    items.forEach((item) => {
+      if (!groupedByDayAndViatura.has(item._dia)) {
+        groupedByDayAndViatura.set(item._dia, new Map<string, FlatItem[]>());
+      }
+      const viaturaMap = groupedByDayAndViatura.get(item._dia)!;
+      if (!viaturaMap.has(item._viatura)) {
+        viaturaMap.set(item._viatura, []);
+      }
+      viaturaMap.get(item._viatura)!.push(item);
+    });
 
+    const finalGrouped: [string, [string, FlatItem[]][]][] = Array.from(
+      groupedByDayAndViatura.entries()
+    )
+      .sort(([diaA], [diaB]) => diaA.localeCompare(diaB))
+      .map(([dia, viaturaMap]) => [
+        dia,
+        Array.from(viaturaMap.entries()).sort(([vA], [vB]) => vA.localeCompare(vB)),
+      ]);
+
+    return finalGrouped;
+  }, [flatItemsAll, viatura, qAgenda]);
+
+  // --- Lógica de filtragem da lista de Instalações ---
   const filteredInstallations = useMemo(() => {
     if (!qInstallations) return localInstallations;
-    const q = qInstallations.toLowerCase();
-    return localInstallations.filter((inst) => {
+    const query = qInstallations.toLowerCase();
+    return localInstallations.filter(inst => {
       const nome = inst.nomeCompleto.toLowerCase();
       const cpf = inst.cpf.toLowerCase();
+      const contato1 = inst.contato1.toLowerCase();
+      const endereco = inst.enderecoFull.toLowerCase();
       const plano = inst.planoNome.toLowerCase();
-      return nome.includes(q) || cpf.includes(q) || plano.includes(q);
+      const apps = inst.appsEscolhidos.map(c => c.apps.join(" ").toLowerCase()).join(" ");
+
+      return nome.includes(query) ||
+             cpf.includes(query) ||
+             contato1.includes(query) ||
+             endereco.includes(query) ||
+             plano.includes(query) ||
+             apps.includes(query);
     });
   }, [localInstallations, qInstallations]);
 
-  const planoSelecionado = useMemo(() => PLANOS.find((p) => p.codigo === iPlano), [iPlano]);
-
-  useEffect(() => {
-    if (planoSelecionado && planoSelecionado.options.length > 0) {
-      setIOpcao(planoSelecionado.options[0].id);
-      setIAppsSelecionados([]);
-    }
-  }, [planoSelecionado]);
 
   return (
     <>
-      <div className="container">
-        <header className="header">
-          <div className="headerLeft">
-            <Image src="/logo.png" alt="Logo" width={40} height={40} />
-            <h1 className="title">Agenda de Viaturas</h1>
+      <header className="topbar">
+        <div className="container topbarInner">
+          <div className="brand">
+            <div className="brandLogo">
+              {/* Substitua o "E" pela sua logo. Coloque sua logo em public/logo.png */}
+              <img src="/logo.png" alt="Logo" style={{ height: "40px" }} />
+            </div>
+            <div>
+              <div className="brandTitle">Agenda Operacional Etech - SGP</div>
+              <div className="brandSub">Gerenciamento de Serviços e Instalações</div>
+            </div>
           </div>
-          <div className="headerRight">
-            {lastUpdated && <div className="chip small">Atualizado: {lastUpdated}</div>}
-            <button className="btn" onClick={loadData} disabled={loading}>
-              {loading ? "Carregando..." : "Atualizar"}
+
+          <nav className="navTabs">
+            <button className={cx("tab", tab === "agenda" && "tabActive")} onClick={() => setTab("agenda")}>
+              Agenda
             </button>
+            <button className={cx("tab", tab === "reservar" && "tabActive")} onClick={() => setTab("reservar")}>
+              Reservar Serviço
+            </button>
+            <button className={cx("tab", tab === "instalacao" && "tabActive")} onClick={() => setTab("instalacao")}>
+              Nova Instalação
+            </button>
+          </nav>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            {tab === "agenda" && (
+              <button className="btn primary" onClick={loadData} disabled={loading}>
+                {loading ? "Atualizando..." : "Atualizar Agenda"}
+              </button>
+            )}
           </div>
-        </header>
+        </div>
+      </header>
 
-        <nav className="tabs">
-          <button className={cx("tab", tab === "agenda" && "active")} onClick={() => setTab("agenda")}>
-            Agenda
-          </button>
-          <button className={cx("tab", tab === "reservar" && "active")} onClick={() => setTab("reservar")}>
-            Reservar
-          </button>
-          <button className={cx("tab", tab === "instalacao" && "active")} onClick={() => setTab("instalacao")}>
-            Instalação
-          </button>
-        </nav>
-
-        {err && <div className="error">{err}</div>}
-
+      <div className="container">
+        {/* --- ABA AGENDA --- */}
         {tab === "agenda" ? (
-          <section className="section">
-            <div className="filters">
+          <>
+            <section className="panel filters">
               <div className="field">
                 <label>Início</label>
                 <input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} />
               </div>
               <div className="field">
                 <label>Dias</label>
-                <input type="number" min="1" max="30" value={dias} onChange={(e) => setDias(Number(e.target.value))} />
+                <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
+                  {[1, 2, 3, 4, 5, 6, 7, 14, 21, 30].map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
               </div>
               <div className="field">
                 <label>Viatura</label>
                 <select value={viatura} onChange={(e) => setViatura(e.target.value)}>
                   <option value="">Todas</option>
-                  {viaturas.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
+                  {data?.viaturas.map((v) => (
+                    <option key={v} value={v}>{v}</option>
                   ))}
+                  {/* Adicionar viaturas de reservas locais se não estiverem na lista do SGP */}
+                  {Array.from(new Set(localReserves.map(r => r.responsavel).filter(Boolean)))
+                    .filter(v => !data?.viaturas.includes(v!))
+                    .map(v => (
+                      <option key={v} value={v}>{v} (Local)</option>
+                    ))}
                 </select>
               </div>
-              <div className="field grow search-field">
-                <input type="text" value={qAgenda} onChange={(e) => setQAgenda(e.target.value)} placeholder="Buscar..." />
+              <div className="field">
+                <label>Max Clientes</label>
+                <input type="number" value={maxClientes} onChange={(e) => setMaxClientes(e.target.value)} />
               </div>
-            </div>
+              <div className="field grow search-field">
+                <label>Busca (cliente, contrato, endereço, plano, motivo)</label>
+                <input type="text" value={qAgenda} onChange={(e) => setQAgenda(e.target.value)} placeholder="Buscar na agenda..." />
+              </div>
+              <div className="field">
+                <label>&nbsp;</label>
+                <button className="btn" onClick={loadData} disabled={loading}>Aplicar Filtros</button>
+              </div>
+            </section>
 
-            {Object.keys(groupedByDay).length === 0 ? (
-              <div className="chip">Nenhum item encontrado.</div>
-            ) : (
-              Object.keys(groupedByDay).map((dia) => {
-                const diaFormatado = new Date(dia + "T00:00:00").toLocaleDateString("pt-BR", {
-                  weekday: "long",
-                  day: "2-digit",
-                  month: "short",
-                });
-                return (
-                  <div key={dia} className="dayBlock">
-                    <div className="dayHeader">{diaFormatado}</div>
-                    <div className="viaturaGrid">
-                      {viaturas.map((vt) => {
-                        const items = groupedByDay[dia][vt] || [];
-                        return (
-                          <div key={vt} className="viaturaCol">
-                            <div className="viaturaTitle">{vt}</div>
-                            {items.length === 0 ? (
-                              <div className="chip tiny">Vazio</div>
-                            ) : (
-                              items.map((it) => (
-                                <div
-                                  key={it.id}
-                                  className={cx("osCard", statusTone(it.status, it.tipo))}
-                                  onClick={() => setSelectedAgendaItem(it)}
-                                >
-                                  <div className="osCardTop">
-                                    <span className="osCardHour">{fmtHour(it.hora)}</span>
-                                    <span className="chip tiny">{it.tipo === "reserva_local" ? "Local" : "SGP"}</span>
-                                  </div>
-                                  <div className="osCardMid">{safeText(it.cliente?.nome)}</div>
-                                  <div className="osCardBot">
-                                    <span className="chip tiny">{safeText(it.motivo)}</span>
-                                    <span className="chip tiny">{safeText(it.status)}</span>
+            {err ? (
+              <section className="panel" style={{ marginTop: 12, padding: 12, borderColor: "rgba(239,68,68,.35)", background: "rgba(58,13,13,.40)" }}>
+                <div style={{ fontWeight: 950 }}>Erro</div>
+                <div style={{ marginTop: 6, color: "rgba(254,202,202,.95)" }}>{err}</div>
+              </section>
+            ) : null}
+
+            <main className="content">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div className="chip">
+                  Período: {inicio} até {fim}
+                </div>
+                {lastUpdated && <div className="chip small">Atualizado em: {lastUpdated}</div>}
+              </div>
+
+              <div className="grid">
+                {filteredAgendaItems.map(([dia, viaturasDoDia]) => (
+                  <section className="col" key={dia}>
+                    <div className="colHead">
+                      <div className="colTitle">{dia}</div>
+                      <span className="chip small">{viaturasDoDia.reduce((acc, [, items]) => acc + items.length, 0)} itens</span>
+                    </div>
+
+                    <div className="cards">
+                      {viaturasDoDia.map(([viaturaKey, itensDaViatura]) => (
+                        <div key={viaturaKey}>
+                          {itensDaViatura.map((it) => {
+                            const c = it.cliente;
+                            const endereco = clienteEnderecoLinha(c);
+
+                            return (
+                              <article
+                                key={`${it.id}-${it._dia}-${it._viatura}`}
+                                className={cx("cardCompact", `tone-${statusTone(it.status, it.tipo)}`)}
+                                onClick={() => setSelectedAgendaItem(it)}
+                                role="button"
+                                tabIndex={0}
+                              >
+                                <div className="cardCompactTop">
+                                  <div className="cardCompactTime">{fmtHour(it.hora)}</div>
+                                  <div className="cardCompactBadges">
+                                    <span className="pill">{it._viatura}</span>
+                                    <span className="pill ghost">
+                                      {it.tipo === "reserva_local" ? "RESERVA (LOCAL)" : `OS ${it.id}`}
+                                    </span>
+                                    <span className="pill ghost">{safeText(it.status)}</span>
                                   </div>
                                 </div>
-                              ))
-                            )}
-                          </div>
-                        );
-                      })}
+
+                                <div className="titleMainClamp">{safeText(c?.nome)}</div>
+                                <div className="titleSub">{safeText(it.motivo)}</div>
+
+                                <div className="cardCompactBody">
+                                  <div className="kvRow">
+                                    <span className="k">Contrato</span>
+                                    <span className="v">{safeText(it.contrato)}</span>
+                                  </div>
+                                  <div className="kvRow">
+                                    <span className="k">Endereço</span>
+                                    <span className="v vClamp2">{safeText(endereco)}</span>
+                                  </div>
+                                  <div className="kvRow">
+                                    <span className="k">Usuário</span>
+                                    <span className="v">{safeText(it.usuario)}</span>
+                                  </div>
+                                  <div className="kvRow">
+                                    <span className="k">Resp.</span>
+                                    <span className="v">{safeText(it.responsavel)}</span>
+                                  </div>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                );
-              })
-            )}
-          </section>
+                  </section>
+                ))}
+              </div>
+            </main>
+          </>
         ) : null}
 
+        {/* --- ABA RESERVAR SERVIÇO --- */}
         {tab === "reservar" ? (
-          <section className="section">
-            <div className="sectionTitle">Criar Reserva Local</div>
-            <div className="form">
+          <section className="panel" style={{ marginTop: 14, padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 950 }}>Reservar serviço (salvo no navegador)</div>
+              <div className="chip">Os dados ficam salvos neste navegador</div>
+            </div>
+
+            <div className="filters">
               <div className="field">
                 <label>Data</label>
                 <input type="date" value={rData} onChange={(e) => setRData(e.target.value)} />
@@ -879,44 +994,53 @@ export default function HomePage() {
               <div className="field">
                 <label>Viatura</label>
                 <select value={rViatura} onChange={(e) => setRViatura(e.target.value)}>
-                  {viaturas.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
+                  {["VT01", "VT02", "VT03", "VT04", "VT05"].map((v) => (
+                    <option key={v} value={v}>{v}</option>
                   ))}
                 </select>
               </div>
+
               <div className="field">
-                <label>Contrato (opcional)</label>
+                <label>Contrato</label>
                 <input value={rContrato} onChange={(e) => setRContrato(e.target.value)} />
               </div>
-              <div className="field">
+
+              <div className="field grow">
                 <label>Motivo</label>
                 <select value={rMotivo} onChange={(e) => setRMotivo(e.target.value)}>
-                  {RESERVA_MOTIVOS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
+                  {RESERVA_MOTIVOS.map((motivo) => (
+                    <option key={motivo} value={motivo}>{motivo}</option>
                   ))}
                 </select>
               </div>
+
               <div className="field">
-                <label>Usuário (opcional)</label>
+                <label>Usuário</label>
                 <input value={rUsuario} onChange={(e) => setRUsuario(e.target.value)} />
               </div>
+
+              <div className="field">
+                <label>Resp.</label>
+                <input value={rResp} onChange={(e) => setRResp(e.target.value)} />
+              </div>
+
               <div className="field grow">
-                <label>Nome do Cliente</label>
+                <label>Nome do cliente</label>
                 <input value={rClienteNome} onChange={(e) => setRClienteNome(e.target.value)} />
               </div>
+
               <div className="field grow">
-                <label>Endereço</label>
+                <label>Endereço (cliente)</label>
                 <input value={rEndereco} onChange={(e) => setREndereco(e.target.value)} />
               </div>
-              <div className="field grow">
+
+              <div className="field">
                 <label>Contato</label>
                 <input value={rContato} onChange={(e) => setRContato(e.target.value)} />
               </div>
-              <div className="field" style={{ gridColumn: "span 3" }}>
+
+              <div className="field">
+                <label>&nbsp;</label>
                 <button className="btn primary" onClick={addLocalReserve}>
                   Salvar Reserva
                 </button>
@@ -925,34 +1049,38 @@ export default function HomePage() {
 
             <div className="hr" />
 
-            <div style={{ fontWeight: 950, marginBottom: "10px" }}>Reservas salvas (neste navegador)</div>
+            <div style={{ fontWeight: 950, marginBottom: 10 }}>Reservas salvas (neste navegador)</div>
             {localReserves.length === 0 ? (
-              <div className="chip">Nenhuma reserva local salva.</div>
+              <div className="chip">Nenhuma reserva local criada.</div>
             ) : (
-              <div className="reservesList">
-                {localReserves.map((r) => (
-                  <div key={r.id} className="reserveItem">
-                    <div className="name">{r.cliente?.nome || "—"}</div>
-                    <div className="datetime">
-                      {r.data} • {fmtHour(r.hora)} • {r.responsavel}
+              <div className="grid">
+                {localReserves.map((it) => (
+                  <section key={it.id} className="panel" style={{ padding: 12 }}>
+                    <div className="kvRow"><span className="k">Quando</span><span className="v">{it.data} {it.hora}</span></div>
+                    <div className="kvRow"><span className="k">Viatura</span><span className="v">{it.responsavel}</span></div>
+                    <div className="kvRow"><span className="k">Contrato</span><span className="v">{it.contrato}</span></div>
+                    <div className="kvRow"><span className="k">Cliente</span><span className="v">{it.cliente?.nome}</span></div>
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                      <button className="btn" onClick={() => removeLocalReserve(it.id)}>Remover</button>
                     </div>
-                    <div className="motivo">{r.motivo}</div>
-                    <button className="btn" onClick={() => removeLocalReserve(r.id)}>
-                      Remover
-                    </button>
-                  </div>
+                  </section>
                 ))}
               </div>
             )}
           </section>
         ) : null}
 
+        {/* --- ABA NOVA INSTALAÇÃO --- */}
         {tab === "instalacao" ? (
-          <section className="section">
-            <div className="sectionTitle">Nova Ficha de Instalação</div>
-            <div className="form">
+          <section className="panel" style={{ marginTop: 14, padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 950 }}>Ficha de instalação (salva no navegador)</div>
+              <div className="chip">Os dados ficam salvos neste navegador</div>
+            </div>
+
+            <div className="filters">
               <div className="field grow">
-                <label>Nome completo</label>
+                <label>Nome Completo</label>
                 <input value={iNome} onChange={(e) => setINome(e.target.value)} />
               </div>
               <div className="field">
@@ -960,12 +1088,12 @@ export default function HomePage() {
                 <input value={iCpf} onChange={(e) => setICpf(e.target.value)} />
               </div>
               <div className="field">
-                <label>Data de nascimento</label>
+                <label>Data de Nascimento</label>
                 <input type="date" value={iNasc} onChange={(e) => setINasc(e.target.value)} />
               </div>
 
               <div className="field grow">
-                <label>Contato 1</label>
+                <label>Contato 1 (WhatsApp)</label>
                 <input value={iContato1} onChange={(e) => setIContato1(e.target.value)} />
               </div>
               <div className="field grow">
@@ -1017,13 +1145,19 @@ export default function HomePage() {
                 <input value={iWifiNome} onChange={(e) => setIWifiNome(e.target.value)} />
               </div>
               <div className="field grow">
-                <label>Senha do Wi-Fi</label>
+                <label>Senha do Wi-Fi (mínimo 8 dígitos)</label>
                 <input value={iWifiSenha} onChange={(e) => setIWifiSenha(e.target.value)} />
               </div>
 
               <div className="field grow">
-                <label>Plano</label>
-                <select value={iPlano} onChange={(e) => setIPlano(e.target.value)}>
+                <label>Plano E-TECH</label>
+                <select value={iPlanoCodigo} onChange={(e) => {
+                  setIPlanoCodigo(e.target.value);
+                  // Ao mudar de plano, resetar a opção e os apps selecionados
+                  const newPlan = PLANOS.find(p => p.codigo === e.target.value) || PLANOS[0];
+                  setIPlanoOptionId(newPlan.options[0].id);
+                  setIAppsSelecionados([]);
+                }}>
                   {PLANOS.map((p) => (
                     <option key={p.codigo} value={p.codigo}>
                       {p.nome} ({p.mbps}MB) - {moneyBRLFromCents(p.valor)}
@@ -1032,25 +1166,26 @@ export default function HomePage() {
                 </select>
               </div>
 
-              {planoSelecionado && planoSelecionado.options.length > 1 && (
+              {selectedPlan.options.length > 1 && (
                 <div className="field grow">
-                  <label>Opção de Apps</label>
-                  <select value={iOpcao} onChange={(e) => { setIOpcao(e.target.value); setIAppsSelecionados([]); }}>
-                    {planoSelecionado.options.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.name}
-                      </option>
+                  <label>Formato do Plano</label>
+                  <select value={iPlanoOptionId} onChange={(e) => {
+                    setIPlanoOptionId(e.target.value);
+                    setIAppsSelecionados([]); // Limpa apps ao mudar de opção
+                  }}>
+                    {selectedPlan.options.map((opt) => (
+                      <option key={opt.id} value={opt.id}>{opt.name}</option>
                     ))}
                   </select>
                 </div>
               )}
 
-              <div className="field" style={{ gridColumn: "span 3" }}>
-                <label>Escolha os Apps</label>
-                {planoSelecionado?.options.find((o) => o.id === iOpcao)?.choices.map((choice) => (
-                  <div key={choice.category} style={{ marginBottom: "12px" }}>
-                    <div style={{ fontWeight: 600, marginBottom: "6px" }}>
-                      {choice.category} (escolha até {choice.count})
+              <div className="field grow" style={{ gridColumn: "1 / -1" }}>
+                <label>Aplicativos do Plano ({selectedPlan.nome} - {selectedPlanOption.name})</label>
+                {selectedPlanOption.choices.map((choice) => (
+                  <div key={choice.category} className="appGroup">
+                    <div className="appGroupTitle">
+                      {choice.category} (Escolha {choice.count} app{choice.count > 1 ? 's' : ''})
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                       {choice.options.map((app) => (
@@ -1092,19 +1227,11 @@ export default function HomePage() {
                 {filteredInstallations.map((inst) => (
                   <div key={inst.id} className="installationItem">
                     <div className="name">{inst.nomeCompleto}</div>
-                    <div className="contact">
-                      {inst.contato1} {inst.email ? `• ${inst.email}` : ""}
-                    </div>
-                    <div className="plan">
-                      {inst.planoNome} • {inst.status}
-                    </div>
+                    <div className="contact">{inst.contato1} {inst.email ? `• ${inst.email}` : ''}</div>
+                    <div className="plan">{inst.planoNome} • {inst.status}</div>
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", gridColumn: "span 3" }}>
-                      <button className="btn" onClick={() => setSelectedInstallation(inst)}>
-                        Ver Detalhes
-                      </button>
-                      <button className="btn" onClick={() => removeLocalInstallation(inst.id)}>
-                        Remover
-                      </button>
+                      <button className="btn" onClick={() => setSelectedInstallation(inst)}>Ver Detalhes</button>
+                      <button className="btn" onClick={() => removeLocalInstallation(inst.id)}>Remover</button>
                     </div>
                   </div>
                 ))}
@@ -1118,6 +1245,7 @@ export default function HomePage() {
         </footer>
       </div>
 
+      {/* --- MODAL DETALHES (para itens da agenda) --- */}
       {selectedAgendaItem ? (
         <div className="overlay" onMouseDown={() => setSelectedAgendaItem(null)}>
           <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
@@ -1140,54 +1268,21 @@ export default function HomePage() {
               <div className="modalGrid">
                 <section className="modalBlock">
                   <div className="modalBlockTitle">Serviço</div>
-                  <div className="kvRow">
-                    <span className="k">Tipo</span>
-                    <span className="v">{safeText(selectedAgendaItem.tipo)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">ID</span>
-                    <span className="v">{safeText(selectedAgendaItem.id)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Contrato</span>
-                    <span className="v">{safeText(selectedAgendaItem.contrato)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Motivo</span>
-                    <span className="v vClamp2">{safeText(selectedAgendaItem.motivo)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Usuário</span>
-                    <span className="v">{safeText(selectedAgendaItem.usuario)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Resp.</span>
-                    <span className="v">{safeText(selectedAgendaItem.responsavel)}</span>
-                  </div>
+                  <div className="kvRow"><span className="k">Tipo</span><span className="v">{safeText(selectedAgendaItem.tipo)}</span></div>
+                  <div className="kvRow"><span className="k">ID</span><span className="v">{safeText(selectedAgendaItem.id)}</span></div>
+                  <div className="kvRow"><span className="k">Contrato</span><span className="v">{safeText(selectedAgendaItem.contrato)}</span></div>
+                  <div className="kvRow"><span className="k">Motivo</span><span className="v vClamp2">{safeText(selectedAgendaItem.motivo)}</span></div>
+                  <div className="kvRow"><span className="k">Usuário</span><span className="v">{safeText(selectedAgendaItem.usuario)}</span></div>
+                  <div className="kvRow"><span className="k">Resp.</span><span className="v">{safeText(selectedAgendaItem.responsavel)}</span></div>
                 </section>
 
                 <section className="modalBlock">
                   <div className="modalBlockTitle">Cliente</div>
-                  <div className="kvRow">
-                    <span className="k">Nome</span>
-                    <span className="v vClamp2">{safeText(selectedAgendaItem.cliente?.nome)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Contato</span>
-                    <span className="v">{safeText(phonesLinha(selectedAgendaItem.cliente))}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Email</span>
-                    <span className="v">{safeText(selectedAgendaItem.cliente?.email)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Plano</span>
-                    <span className="v vClamp2">{safeText(selectedAgendaItem.cliente?.plano)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Endereço</span>
-                    <span className="v vClamp2">{safeText(clienteEnderecoLinha(selectedAgendaItem.cliente))}</span>
-                  </div>
+                  <div className="kvRow"><span className="k">Nome</span><span className="v vClamp2">{safeText(selectedAgendaItem.cliente?.nome)}</span></div>
+                  <div className="kvRow"><span className="k">Contato</span><span className="v">{safeText(phonesLinha(selectedAgendaItem.cliente))}</span></div>
+                  <div className="kvRow"><span className="k">Email</span><span className="v">{safeText(selectedAgendaItem.cliente?.email)}</span></div>
+                  <div className="kvRow"><span className="k">Plano</span><span className="v vClamp2">{safeText(selectedAgendaItem.cliente?.plano)}</span></div>
+                  <div className="kvRow"><span className="k">Endereço</span><span className="v vClamp2">{safeText(clienteEnderecoLinha(selectedAgendaItem.cliente))}</span></div>
                 </section>
               </div>
             </div>
@@ -1202,12 +1297,15 @@ export default function HomePage() {
         </div>
       ) : null}
 
+      {/* --- MODAL DETALHES (para fichas de instalação) --- */}
       {selectedInstallation ? (
         <div className="overlay" onMouseDown={() => setSelectedInstallation(null)}>
           <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
             <div className="modalHead">
               <div>
-                <div className="modalTitleMain">Ficha de Instalação • {selectedInstallation.nomeCompleto}</div>
+                <div className="modalTitleMain">
+                  Ficha de Instalação • {selectedInstallation.nomeCompleto}
+                </div>
                 <div className="modalTitleSub">
                   {selectedInstallation.planoNome} • {selectedInstallation.status}
                 </div>
@@ -1221,93 +1319,37 @@ export default function HomePage() {
               <div className="modalGrid">
                 <section className="modalBlock">
                   <div className="modalBlockTitle">Dados do Cliente</div>
-                  <div className="kvRow">
-                    <span className="k">Nome</span>
-                    <span className="v vClamp2">{safeText(selectedInstallation.nomeCompleto)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">CPF</span>
-                    <span className="v">{safeText(selectedInstallation.cpf)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Nascimento</span>
-                    <span className="v">{safeText(selectedInstallation.nascimento)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Contato 1</span>
-                    <span className="v">{safeText(selectedInstallation.contato1)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Contato 2</span>
-                    <span className="v">{safeText(selectedInstallation.contato2)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">E-mail</span>
-                    <span className="v">{safeText(selectedInstallation.email)}</span>
-                  </div>
+                  <div className="kvRow"><span className="k">Nome</span><span className="v vClamp2">{safeText(selectedInstallation.nomeCompleto)}</span></div>
+                  <div className="kvRow"><span className="k">CPF</span><span className="v">{safeText(selectedInstallation.cpf)}</span></div>
+                  <div className="kvRow"><span className="k">Nascimento</span><span className="v">{safeText(selectedInstallation.nascimento)}</span></div>
+                  <div className="kvRow"><span className="k">Contato 1</span><span className="v">{safeText(selectedInstallation.contato1)}</span></div>
+                  <div className="kvRow"><span className="k">Contato 2</span><span className="v">{safeText(selectedInstallation.contato2)}</span></div>
+                  <div className="kvRow"><span className="k">E-mail</span><span className="v">{safeText(selectedInstallation.email)}</span></div>
                 </section>
 
                 <section className="modalBlock">
                   <div className="modalBlockTitle">Endereço e Cobrança</div>
-                  <div className="kvRow">
-                    <span className="k">Endereço</span>
-                    <span className="v vClamp2">{safeText(selectedInstallation.enderecoFull)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Referência</span>
-                    <span className="v vClamp2">{safeText(selectedInstallation.referencia)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Vencimento</span>
-                    <span className="v">Dia {selectedInstallation.vencimentoDia}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Fatura</span>
-                    <span className="v">{safeText(selectedInstallation.entregaFatura)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Taxa Inst.</span>
-                    <span className="v">{safeText(selectedInstallation.taxaPagamento)}</span>
-                  </div>
+                  <div className="kvRow"><span className="k">Endereço</span><span className="v vClamp2">{safeText(selectedInstallation.enderecoFull)}</span></div>
+                  <div className="kvRow"><span className="k">Referência</span><span className="v vClamp2">{safeText(selectedInstallation.referencia)}</span></div>
+                  <div className="kvRow"><span className="k">Vencimento</span><span className="v">Dia {selectedInstallation.vencimentoDia}</span></div>
+                  <div className="kvRow"><span className="k">Fatura</span><span className="v">{safeText(selectedInstallation.entregaFatura)}</span></div>
+                  <div className="kvRow"><span className="k">Taxa Inst.</span><span className="v">{safeText(selectedInstallation.taxaPagamento)}</span></div>
                 </section>
 
                 <section className="modalBlock" style={{ gridColumn: "1 / -1" }}>
                   <div className="modalBlockTitle">Detalhes do Serviço</div>
-                  <div className="kvRow">
-                    <span className="k">Plano</span>
-                    <span className="v">
-                      {safeText(selectedInstallation.planoNome)} ({selectedInstallation.planoMbps}MB)
-                    </span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Valor</span>
-                    <span className="v">{moneyBRLFromCents(selectedInstallation.planoValor || 0)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Wi-Fi Nome</span>
-                    <span className="v">{safeText(selectedInstallation.wifiNome)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Wi-Fi Senha</span>
-                    <span className="v">{safeText(selectedInstallation.wifiSenha)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Apps Escolhidos</span>
-                    <span className="v vClamp2">
-                      {selectedInstallation.appsEscolhidos
-                        .map((cat) => (cat.apps.length > 0 ? `${cat.category}: ${cat.apps.join(", ")}` : ""))
-                        .filter(Boolean)
-                        .join(" • ") || "Nenhum"}
-                    </span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Status</span>
-                    <span className="v">{safeText(selectedInstallation.status)}</span>
-                  </div>
-                  <div className="kvRow">
-                    <span className="k">Criado em</span>
-                    <span className="v">{new Date(selectedInstallation.createdAt).toLocaleString("pt-BR")}</span>
-                  </div>
+                  <div className="kvRow"><span className="k">Plano</span><span className="v">{safeText(selectedInstallation.planoNome)} ({selectedInstallation.planoMbps}MB)</span></div>
+                  <div className="kvRow"><span className="k">Valor</span><span className="v">{moneyBRLFromCents(selectedInstallation.planoValor || 0)}</span></div>
+                  <div className="kvRow"><span className="k">Wi-Fi Nome</span><span className="v">{safeText(selectedInstallation.wifiNome)}</span></div>
+                  <div className="kvRow"><span className="k">Wi-Fi Senha</span><span className="v">{safeText(selectedInstallation.wifiSenha)}</span></div>
+                  <div className="kvRow"><span className="k">Apps Escolhidos</span><span className="v vClamp2">
+                    {selectedInstallation.appsEscolhidos.map(cat =>
+                      cat.apps.length > 0 ? `${cat.category}: ${cat.apps.join(", ")}` : ''
+                    ).filter(Boolean).join(" • ") || "Nenhum"
+                    }
+                  </span></div>
+                  <div className="kvRow"><span className="k">Status</span><span className="v">{safeText(selectedInstallation.status)}</span></div>
+                  <div className="kvRow"><span className="k">Criado em</span><span className="v">{new Date(selectedInstallation.createdAt).toLocaleString('pt-BR')}</span></div>
                 </section>
               </div>
             </div>
