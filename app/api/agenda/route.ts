@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const inicio = url.searchParams.get("inicio") || "";
   const fim = url.searchParams.get("fim") || "";
   const cliente = url.searchParams.get("cliente") ?? "1";
-  const max_clientes = url.searchParams.get("max_clientes") ?? "400";
+  const max_clientes = url.searchParams.get("max_clientes") ?? "200";
 
   if (!inicio || !fim) {
     return NextResponse.json(
