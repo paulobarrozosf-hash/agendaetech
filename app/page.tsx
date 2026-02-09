@@ -994,7 +994,7 @@ export default function HomePage() {
               <div className="field">
                 <label>Viatura</label>
                 <select value={rViatura} onChange={(e) => setRViatura(e.target.value)}>
-                  {["VT01", "VT02", "VT03", "VT04", "VT05"].map((v) => (
+                  {["VT01", "VT02", "VT03", "VT04"].map((v) => (
                     <option key={v} value={v}>{v}</option>
                   ))}
                 </select>
