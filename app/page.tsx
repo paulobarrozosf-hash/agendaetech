@@ -874,7 +874,7 @@ export default function HomePage() {
                   {Array.from(new Set(localReserves.map(r => r.responsavel).filter(Boolean)))
                     .filter(v => !data?.viaturas.includes(v!))
                     .map(v => (
-                      <option key={v} value={v}>{v} (Local)</option>
+                      <option key={v ?? ''} value={v ?? ''}>{v} (Local)</option>
                     ))}
                 </select>
               </div>
