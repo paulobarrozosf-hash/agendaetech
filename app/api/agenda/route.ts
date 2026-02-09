@@ -10,7 +10,9 @@ export async function GET(req: Request) {
   const inicio = url.searchParams.get("inicio") || "";
   const fim = url.searchParams.get("fim") || "";
   const cliente = url.searchParams.get("cliente") ?? "1";
-  const max_clientes = url.searchParams.get("max_clientes") ?? "200";
+
+  // ✅ REMOVIDO: max_clientes não é mais necessário
+  // O worker agora busca TODOS os clientes quando cliente=1
 
   if (!inicio || !fim) {
     return NextResponse.json(
@@ -23,17 +25,46 @@ export async function GET(req: Request) {
   workerUrl.searchParams.set("inicio", inicio);
   workerUrl.searchParams.set("fim", fim);
   workerUrl.searchParams.set("cliente", cliente);
-  workerUrl.searchParams.set("max_clientes", max_clientes);
 
-  const resp = await fetch(workerUrl.toString(), { cache: "no-store" });
-  const text = await resp.text();
+  // ✅ REMOVIDO: max_clientes não precisa mais ser enviado
+  // workerUrl.searchParams.set("max_clientes", max_clientes);
 
-  return new NextResponse(text, {
-    status: resp.status,
-    headers: {
-      "content-type":
-        resp.headers.get("content-type") || "application/json; charset=utf-8",
-      "x-proxy-by": "next-route",
-    },
-  });
+  try {
+    const resp = await fetch(workerUrl.toString(), { 
+      cache: "no-store",
+      // ✅ OPCIONAL: Adicionar timeout para evitar que o Next.js fique esperando indefinidamente
+      signal: AbortSignal.timeout(50000) // 50 segundos (ajuste conforme necessário)
+    });
+
+    if (!resp.ok) {
+      // ✅ Melhor tratamento de erros
+      const errorText = await resp.text();
+      console.error(`[WORKER ERROR] Status ${resp.status}: ${errorText}`);
+      return NextResponse.json(
+        { error: `Worker retornou erro: ${resp.status}`, details: errorText },
+        { status: resp.status }
+      );
+    }
+
+    const text = await resp.text();
+
+    return new NextResponse(text, {
+      status: resp.status,
+      headers: {
+        "content-type":
+          resp.headers.get("content-type") || "application/json; charset=utf-8",
+        "x-proxy-by": "next-route",
+      },
+    });
+  } catch (error) {
+    // ✅ Tratamento de erros de rede ou timeout
+    console.error(`[ROUTE ERROR] Falha ao chamar worker:`, error);
+    return NextResponse.json(
+      { 
+        error: "Falha ao comunicar com o worker", 
+        details: error instanceof Error ? error.message : String(error) 
+      },
+      { status: 500 }
+    );
+  }
 }
